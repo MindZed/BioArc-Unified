@@ -20,7 +20,8 @@ export default function MaintenancePage() {
   const [knowledgeChunks, setKnowledgeChunks] = useState<any[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [chunkTitle, setChunkTitle] = useState('');
-  const [chunkCategory, setChunkCategory] = useState('biology');
+  const [chunkCategory, setChunkCategory] = useState('team');
+  const [customCategory, setCustomCategory] = useState('');
   const [chunkContent, setChunkContent] = useState('');
   const [chunkFilter, setChunkFilter] = useState('ALL');
   const [chunkSearch, setChunkSearch] = useState('');
@@ -81,6 +82,10 @@ export default function MaintenancePage() {
       return;
     }
     setIsSubmitting(true);
+    const finalCategory = chunkCategory === 'custom' 
+      ? (customCategory.trim().toLowerCase() || 'general') 
+      : chunkCategory;
+
     try {
       const res = await fetch('/api/context', {
         method: 'POST',
@@ -90,7 +95,7 @@ export default function MaintenancePage() {
         },
         body: JSON.stringify({ 
           title: chunkTitle.trim(),
-          category: chunkCategory,
+          category: finalCategory,
           content: chunkContent.trim()
         }),
       });
@@ -99,6 +104,7 @@ export default function MaintenancePage() {
         setStatusMessage('Success! 768-dim vector embedded & saved to pgvector.');
         setChunkTitle('');
         setChunkContent('');
+        setCustomCategory('');
         fetchKnowledgeChunks();
         setTimeout(() => {
           setStatusMessage('');
@@ -601,6 +607,8 @@ export default function MaintenancePage() {
                             className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-emerald-500/50 cursor-pointer"
                           >
                             <option value="ALL">All Categories</option>
+                            <option value="team">Creators & Team</option>
+                            <option value="general">General & Overview</option>
                             <option value="biology">Biology</option>
                             <option value="hardware">Hardware</option>
                             <option value="safety">Safety</option>
@@ -690,13 +698,31 @@ export default function MaintenancePage() {
                             onChange={(e) => setChunkCategory(e.target.value)}
                             className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors font-satoshi cursor-pointer"
                           >
+                            <option value="team">Creators & Team (MindZed, founders, engineers, contributors, contact)</option>
+                            <option value="general">General & Overview (Project mission, purpose, bio-reactor background)</option>
                             <option value="biology">Biology (Cultivation parameters, Chlorella, Growth Rate)</option>
                             <option value="hardware">Hardware (Sensors, ESP32, GPIO, Wiring, Tank Geometry)</option>
                             <option value="operation">Operation (Manual Overrides, Relays, Harvesting, Refill)</option>
                             <option value="safety">Safety (Emergency Shutdown, Safety Interlocks, Alarms)</option>
                             <option value="troubleshooting">Troubleshooting (I2C collisions, WiFi/MQTT recovery)</option>
                             <option value="architecture">Architecture (Dokploy, APIs, WebSockets, Monorepo layout)</option>
+                            <option value="custom">Custom Category... (Type your own)</option>
                           </select>
+                          {chunkCategory === 'custom' && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-1"
+                            >
+                              <input
+                                type="text"
+                                placeholder="Enter custom category name (e.g. patents, funding, partners)..."
+                                value={customCategory}
+                                onChange={(e) => setCustomCategory(e.target.value)}
+                                className="w-full bg-black/40 border border-emerald-500/40 rounded-xl px-4 py-2.5 text-white text-xs focus:outline-none focus:border-emerald-400 font-satoshi"
+                              />
+                            </motion.div>
+                          )}
                         </div>
 
                         <div className="flex flex-col gap-1.5">
