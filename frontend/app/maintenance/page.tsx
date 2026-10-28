@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
-import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw, Plus, Trash2, Layers, Search, FileText, Loader2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
 export default function MaintenancePage() {
@@ -16,8 +16,14 @@ export default function MaintenancePage() {
   const { maintenanceLogs, hardwareLifespan, systemHealthSummary, lastAnalyzedAt, setMaintenanceData, telemetry, sendActionCommand } = useStore();
   const [mounted, setMounted] = useState(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState(false);
-  const [keyword, setKeyword] = useState('');
-  const [content, setContent] = useState('');
+  const [contextTab, setContextTab] = useState<'list' | 'add'>('list');
+  const [knowledgeChunks, setKnowledgeChunks] = useState<any[]>([]);
+  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
+  const [chunkTitle, setChunkTitle] = useState('');
+  const [chunkCategory, setChunkCategory] = useState('biology');
+  const [chunkContent, setChunkContent] = useState('');
+  const [chunkFilter, setChunkFilter] = useState('ALL');
+  const [chunkSearch, setChunkSearch] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -47,10 +53,31 @@ export default function MaintenancePage() {
       .finally(() => setIsLoadingLogs(false));
   };
 
-  const handleSaveContext = async () => {
+  const fetchKnowledgeChunks = async () => {
+    setIsLoadingChunks(true);
+    try {
+      const res = await fetch('/api/context');
+      const data = await res.json();
+      if (data && Array.isArray(data.chunks)) {
+        setKnowledgeChunks(data.chunks);
+      }
+    } catch (e) {
+      console.error('Failed to fetch knowledge chunks:', e);
+    } finally {
+      setIsLoadingChunks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isContextModalOpen) {
+      fetchKnowledgeChunks();
+    }
+  }, [isContextModalOpen]);
+
+  const handleSaveChunk = async () => {
     setStatusMessage('');
-    if (!keyword || !content) {
-      setStatusMessage('Please fill all fields');
+    if (!chunkTitle.trim() || !chunkContent.trim()) {
+      setStatusMessage('Please fill in title and content');
       return;
     }
     setIsSubmitting(true);
@@ -61,14 +88,22 @@ export default function MaintenancePage() {
           'Content-Type': 'application/json',
           'X-BioArc-Client': 'true'
         },
-        body: JSON.stringify({ keyword, content }),
+        body: JSON.stringify({ 
+          title: chunkTitle.trim(),
+          category: chunkCategory,
+          content: chunkContent.trim()
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        setStatusMessage('Success! Context added.');
-        setKeyword('');
-        setContent('');
-        setTimeout(() => setIsContextModalOpen(false), 2000);
+        setStatusMessage('Success! 768-dim vector embedded & saved to pgvector.');
+        setChunkTitle('');
+        setChunkContent('');
+        fetchKnowledgeChunks();
+        setTimeout(() => {
+          setStatusMessage('');
+          setContextTab('list');
+        }, 1500);
       } else {
         setStatusMessage(data.error || 'Failed to save');
       }
@@ -76,6 +111,20 @@ export default function MaintenancePage() {
       setStatusMessage('Network error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteChunk = async (id: string) => {
+    try {
+      const res = await fetch(`/api/context?id=${id}`, {
+        method: 'DELETE',
+        headers: { 'X-BioArc-Client': 'true' }
+      });
+      if (res.ok) {
+        setKnowledgeChunks(prev => prev.filter(c => c.id !== id));
+      }
+    } catch (e) {
+      console.error('Failed to delete chunk:', e);
     }
   };
 
@@ -452,89 +501,245 @@ export default function MaintenancePage() {
         </div>
       </motion.div>
 
-      {/* KNOWLEDGE BASE MODAL */}
+      {/* VECTOR KNOWLEDGE BASE MODAL */}
       <AnimatePresence>
         {isContextModalOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
           >
             <motion.div
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col relative"
+              className="bg-zinc-900 border border-white/10 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col relative max-h-[85vh]"
             >
               {/* Close Button */}
               <button
                 onClick={() => setIsContextModalOpen(false)}
-                className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors z-10"
+                className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors z-20 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="p-8 flex flex-col gap-6">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.01]">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                    <Database className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-clash text-lg font-bold text-white tracking-wide">Vector Knowledge Base</h3>
+                      <span className="px-2 py-0.5 text-[10px] font-mono bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full">pgvector</span>
+                    </div>
+                    <p className="text-zinc-400 text-xs font-satoshi mt-0.5">Semantic RAG chunks stored as 768-dimensional vectors in PostgreSQL.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 flex flex-col gap-4 overflow-y-auto flex-1 custom-scrollbar">
                 {!isAdmin ? (
-                  <div className="flex flex-col items-center text-center gap-4 py-4">
-                    <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mb-2">
+                  <div className="flex flex-col items-center text-center gap-4 py-8">
+                    <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center">
                       <Lock className="w-7 h-7 text-red-400" />
                     </div>
                     <div>
                       <h3 className="font-clash text-xl font-semibold text-white">Admin Authorization Required</h3>
-                      <p className="text-zinc-400 font-satoshi text-sm mt-2">You must be logged in as an administrator to modify the secure knowledge base.</p>
+                      <p className="text-zinc-400 font-satoshi text-sm mt-2">Only administrators can view and modify the physical reactor knowledge base.</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-3 border-b border-white/5 pb-4">
-                      <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                        <Database className="w-5 h-5 text-emerald-400" />
-                      </div>
-                      <div>
-                        <h3 className="font-clash text-lg font-semibold text-white">Add System Context</h3>
-                        <p className="text-zinc-400 text-xs font-satoshi">Securely inject facts into the RAG pipeline.</p>
-                      </div>
+                  <>
+                    {/* Navigation Tabs */}
+                    <div className="flex items-center gap-2 border-b border-white/5 pb-3 shrink-0">
+                      <button
+                        onClick={() => setContextTab('list')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-satoshi transition-all cursor-pointer ${
+                          contextTab === 'list'
+                            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        Indexed Chunks ({knowledgeChunks.length})
+                      </button>
+                      <button
+                        onClick={() => { setContextTab('add'); setStatusMessage(''); }}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-satoshi transition-all cursor-pointer ${
+                          contextTab === 'add'
+                            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add New Knowledge Chunk
+                      </button>
                     </div>
 
-                    <div className="flex flex-col gap-3">
-                      <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Keyword</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. goals, architecture, pump..."
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
-                      />
-                    </div>
+                    {/* TAB 1: LIST / BROWSE CHUNKS */}
+                    {contextTab === 'list' && (
+                      <div className="flex flex-col gap-3">
+                        {/* Search and Category Filter */}
+                        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                          <div className="relative flex-1">
+                            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              placeholder="Filter chunks by title or content..."
+                              value={chunkSearch}
+                              onChange={(e) => setChunkSearch(e.target.value)}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                            />
+                          </div>
+                          <select
+                            value={chunkFilter}
+                            onChange={(e) => setChunkFilter(e.target.value)}
+                            className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+                          >
+                            <option value="ALL">All Categories</option>
+                            <option value="biology">Biology</option>
+                            <option value="hardware">Hardware</option>
+                            <option value="safety">Safety</option>
+                            <option value="operation">Operation</option>
+                            <option value="troubleshooting">Troubleshooting</option>
+                            <option value="architecture">Architecture</option>
+                          </select>
+                        </div>
 
-                    <div className="flex flex-col gap-3">
-                      <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Context Data</label>
-                      <textarea
-                        placeholder="Detailed facts and system logic..."
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        rows={4}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors resize-none"
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleSaveContext}
-                      disabled={isSubmitting}
-                      className="w-full mt-2 flex items-center justify-center gap-2 bg-zinc-100 hover:bg-white text-black font-semibold rounded-xl px-4 py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Save className="w-4 h-4" />
-                      {isSubmitting ? 'Saving...' : 'Save to Database'}
-                    </button>
-
-                    {statusMessage && (
-                      <div className={`text-center text-sm font-semibold p-2 rounded-lg ${statusMessage.includes('Success') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                        {statusMessage}
+                        {/* Chunks List */}
+                        {isLoadingChunks ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-zinc-500 gap-3">
+                            <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+                            <span className="text-xs font-satoshi">Loading vector chunks from PostgreSQL...</span>
+                          </div>
+                        ) : knowledgeChunks.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-zinc-500 gap-3 border border-dashed border-white/10 rounded-2xl">
+                            <FileText className="w-8 h-8 opacity-30" />
+                            <p className="text-xs font-satoshi">No knowledge chunks found. Click &quot;Add New Knowledge Chunk&quot; to begin indexing.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+                            {knowledgeChunks
+                              .filter(c => chunkFilter === 'ALL' || c.category === chunkFilter)
+                              .filter(c => !chunkSearch || c.title.toLowerCase().includes(chunkSearch.toLowerCase()) || c.content.toLowerCase().includes(chunkSearch.toLowerCase()))
+                              .map((chunk) => (
+                                <div
+                                  key={chunk.id}
+                                  className="p-3.5 bg-black/30 hover:bg-black/50 border border-white/5 hover:border-emerald-500/20 rounded-2xl transition-all flex flex-col gap-2 group"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <h4 className="font-satoshi font-semibold text-sm text-zinc-200 group-hover:text-emerald-400 transition-colors">
+                                        {chunk.title}
+                                      </h4>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded bg-white/5 border border-white/10 text-zinc-400">
+                                          {chunk.category || 'general'}
+                                        </span>
+                                        <span className="text-[10px] text-zinc-600 font-mono">
+                                          {new Date(chunk.createdAt).toLocaleDateString()}
+                                        </span>
+                                        {chunk.hasEmbedding && (
+                                          <span className="flex items-center gap-1 text-[9px] font-mono text-emerald-400">
+                                            <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                                            768-dim
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleDeleteChunk(chunk.id)}
+                                      className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                                      title="Delete Chunk"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                  <p className="text-xs text-zinc-400 font-satoshi line-clamp-2 leading-relaxed">
+                                    {chunk.content}
+                                  </p>
+                                </div>
+                              ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+
+                    {/* TAB 2: ADD NEW VECTOR CHUNK */}
+                    {contextTab === 'add' && (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Chunk Title</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Nutrient Dosing Schedule, Overflow Emergency SOP..."
+                            value={chunkTitle}
+                            onChange={(e) => setChunkTitle(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors font-satoshi"
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Category</label>
+                          <select
+                            value={chunkCategory}
+                            onChange={(e) => setChunkCategory(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors font-satoshi cursor-pointer"
+                          >
+                            <option value="biology">Biology (Cultivation parameters, Chlorella, Growth Rate)</option>
+                            <option value="hardware">Hardware (Sensors, ESP32, GPIO, Wiring, Tank Geometry)</option>
+                            <option value="operation">Operation (Manual Overrides, Relays, Harvesting, Refill)</option>
+                            <option value="safety">Safety (Emergency Shutdown, Safety Interlocks, Alarms)</option>
+                            <option value="troubleshooting">Troubleshooting (I2C collisions, WiFi/MQTT recovery)</option>
+                            <option value="architecture">Architecture (Dokploy, APIs, WebSockets, Monorepo layout)</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Documentation Content</label>
+                          <textarea
+                            placeholder="Detailed operating instructions, biophysical bounds, thresholds, or system logic..."
+                            value={chunkContent}
+                            onChange={(e) => setChunkContent(e.target.value)}
+                            rows={5}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors resize-none font-satoshi leading-relaxed"
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleSaveChunk}
+                          disabled={isSubmitting || !chunkTitle.trim() || !chunkContent.trim()}
+                          className="w-full mt-2 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl px-4 py-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Generating 768-dim Vector & Storing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              <span>Embed & Save to Vector Database</span>
+                            </>
+                          )}
+                        </button>
+
+                        {statusMessage && (
+                          <div className={`text-center text-xs font-semibold p-3 rounded-xl ${
+                            statusMessage.includes('Success') 
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {statusMessage}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </motion.div>

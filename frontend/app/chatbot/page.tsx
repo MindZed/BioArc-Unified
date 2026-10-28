@@ -322,7 +322,7 @@ export default function ChatbotPage() {
                 className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full"
               >
                 {[
-                  { title: "Optimize Bioreactor", desc: "Suggest optimal parameters for yeast growth", text: "What are the optimal parameters for yeast growth in BioArc?" },
+                  { title: "Optimize Bioreactor", desc: "Suggest optimal parameters for Chlorella growth", text: "What are the optimal parameters for Chlorella microalgae growth in BioArc?" },
                   { title: "Query Knowledge", desc: "Find research on pH levels and sensor calibration", text: "Search knowledge base for pH sensor calibration instructions" },
                   { title: "Calibrate Pumps", desc: "How to safely toggle nutrients and pH actuators", text: "How do I safely toggle nutrients and pH control?" },
                   { title: "Status Dashboard", desc: "Explain the current telemetry and active FSM states", text: "Explain the current telemetry status and active FSM states" },

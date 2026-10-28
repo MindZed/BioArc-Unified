@@ -28,79 +28,86 @@ async function sendWithRetry(url: string, action: string, maxRetries = 2): Promi
   throw lastError;
 }
 
+import { generateEmbedding } from './embedding';
+
 export const getBioarcTools = (userRole?: string) => ({
   getKnowledgeBaseTopics: tool({
-    description: "Always call this FIRST before searching the knowledge base. It returns a list of all valid topics/keywords currently available in the database.",
+    description: "Returns the available knowledge categories in BioArc. You can also call searchKnowledgeBase directly with any natural language question.",
     parameters: z.object({}),
     // @ts-ignore
     execute: async () => {
-      console.log('[TOOL] 🗂️ Fetching knowledge base index...');
-      const records = await prisma.projectContext.findMany({
-        select: { keyword: true }
-      });
-      if (records.length === 0) return "The knowledge base is currently empty.";
-      const topics = records.map((r: any) => r.keyword).join(', ');
-      return `Available keywords to search: ${topics}`;
+      try {
+        const categories: any[] = await prisma.$queryRaw`
+          SELECT DISTINCT category FROM "KnowledgeChunk" WHERE category IS NOT NULL;
+        `;
+        const categoryNames = categories.map((c: any) => c.category).filter(Boolean);
+        if (categoryNames.length > 0) {
+          return `Available Knowledge Categories: ${categoryNames.join(', ')}. You can ask questions directly using searchKnowledgeBase.`;
+        }
+      } catch (e) {
+        // Fallback to legacy ProjectContext keywords if KnowledgeChunk empty
+      }
+      const records = await prisma.projectContext.findMany({ select: { keyword: true } });
+      if (records.length === 0) return "Knowledge base is initialized. You can search directly with natural language.";
+      return `Available topics: ${records.map((r: any) => r.keyword).join(', ')}`;
     }
   }),
   searchKnowledgeBase: tool({
-    description: "Search the database for facts about the BioArc project, how it works, its goals, and its creators.",
+    description: "Semantic Vector Search: Search the BioArc engineering manual, biophysical parameters, operating procedures, and safety guidelines using natural language.",
     parameters: z.object({
-      query: z.string().describe("A single search keyword or short phrase. Example: 'goal' or 'creator'"),
+      query: z.string().describe("The natural language question or search topic (e.g., 'optimal water temperature for Chlorella', 'pump calibration procedure', 'hardware pinout')."),
     }),
     // @ts-ignore - TS fails to resolve the tool overload properly with explicit types
-    execute: async ({ query, keyword }: { query?: string, keyword?: string }) => {
-      const actualQuery = query || keyword;
-      let keywords: string[] = [];
-      if (typeof actualQuery === 'string' && actualQuery.trim()) {
-        try {
-          // Sometimes the AI hallucinates a stringified JSON array
-          const parsed = JSON.parse(actualQuery);
-          if (Array.isArray(parsed)) {
-            keywords = parsed.map(String);
-          } else {
-            keywords = [String(parsed)];
-          }
-        } catch {
-          // If the AI hallucinates a full sentence, clean it and split by spaces OR commas
-          keywords = actualQuery
-            .replace(/[^a-zA-Z0-9 ,]/g, '') // Strip special chars
-            .split(/[\s,]+/)                // Split by comma or space
-            .map(k => k.trim())
-            .filter(k => k.length > 3);     // Drop short words like 'the', 'is', 'of'
-            
-          // If the word was exactly 3 letters or less (like "aim"), but we dropped everything
-          if (keywords.length === 0) {
-            keywords = actualQuery.split(',').map(k => k.replace(/[^a-zA-Z0-9 -]/g, '').trim()).filter(Boolean);
-          }
+    execute: async ({ query }: { query: string }) => {
+      console.log(`[TOOL] 🔎 Vector Search triggered for: "${query}"`);
+      if (!query || !query.trim()) {
+        return "Please provide a search query.";
+      }
+
+      try {
+        // 1. Generate 768-dimensional query vector via Gemini text-embedding-004
+        const queryVector = await generateEmbedding(query);
+        const vectorString = `[${queryVector.join(',')}]`;
+
+        // 2. Query PostgreSQL with Cosine Distance (<=> operator) using HNSW index
+        const matches: any[] = await prisma.$queryRaw`
+          SELECT id, title, category, content, 
+                 ROUND((1 - (embedding <=> ${vectorString}::vector))::numeric, 3) AS similarity
+          FROM "KnowledgeChunk"
+          WHERE embedding IS NOT NULL
+            AND (1 - (embedding <=> ${vectorString}::vector)) > 0.45
+          ORDER BY (embedding <=> ${vectorString}::vector) ASC
+          LIMIT 4;
+        `;
+
+        if (matches && matches.length > 0) {
+          console.log(`[TOOL] 🎯 Vector Search found ${matches.length} chunks (Top similarity: ${matches[0].similarity})`);
+          return matches.map((m: any) => 
+            `### ${m.title} [Category: ${m.category || 'general'}] (Relevance: ${Math.round(m.similarity * 100)}%)\n${m.content}`
+          ).join('\n\n');
         }
+
+        // 3. Fallback: If no vector matches found, search legacy ProjectContext
+        console.log('[TOOL] ℹ️ No vector chunks found above threshold, falling back to keyword search...');
+        const legacyRecords = await prisma.projectContext.findMany({
+          where: {
+            OR: [
+              { keyword: { contains: query, mode: 'insensitive' } },
+              { content: { contains: query, mode: 'insensitive' } },
+            ]
+          },
+          take: 3
+        });
+
+        if (legacyRecords.length > 0) {
+          return legacyRecords.map((r: any) => `Knowledge (${r.keyword}): ${r.content}`).join('\n\n');
+        }
+
+        return "No relevant technical documentation found for this query in the knowledge base.";
+      } catch (err: any) {
+        console.error('[TOOL] ❌ Vector search error:', err);
+        return `Error during knowledge search: ${err.message}`;
       }
-
-      if (!actualQuery || !actualQuery.trim()) {
-        console.log('[TOOL] 🔎 Empty query received. Returning general project context.');
-        const records = await prisma.projectContext.findMany({ take: 10 });
-        if (records.length === 0) return "No data found.";
-        return records.map((r: any) => `Knowledge (Keyword: ${r.keyword}): ${r.content}`).join('\n\n');
-      }
-
-      console.log('[TOOL] 🔎 Multi-query search for:', keywords);
-    
-      // Dynamically build the OR conditions for every keyword provided
-      const orConditions = keywords.flatMap(kw => [
-        { keyword: { contains: kw, mode: 'insensitive' as const } },
-        { content: { contains: kw, mode: 'insensitive' as const } }
-      ]);
-      
-      const records = await prisma.projectContext.findMany({
-        where: { OR: orConditions },
-        take: 5 
-      });
-
-      console.log(`[TOOL] 🔎 Found ${records.length} records in Prisma`);
-      
-      if (records.length === 0) return "No data found for these keywords.";
-    
-      return records.map((r: any) => `Knowledge (Keyword: ${r.keyword}): ${r.content}`).join('\n\n');
     },
   }),
   toggleActuator: tool({

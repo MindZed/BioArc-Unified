@@ -153,26 +153,21 @@ export function useGeminiLive(voiceName: string = 'Fenrir') {
               systemInstruction: {
                 parts: [
                   {
-                    text: "You are the BioArc Reactor AI. You manage a physical algae bioreactor. IMPORTANT: 1) If the user asks general questions about the BioArc project, its creators, goals, or how it works, you MUST execute a two-step search: a) Call getKnowledgeBaseTopics to see what keywords exist. b) Call searchKnowledgeBase using the EXACT keywords you found in step 1. 2) If the user asks to control hardware or enable/disable manual override, use toggleActuator (e.g. manual_mode_on, light_off, intake_on)."
+                    text: "You are the BioArc Reactor AI. You manage a physical algae bioreactor. IMPORTANT: 1) If the user asks questions about the BioArc project, creators, biophysical parameters (pH, dissolved oxygen, temperature, lighting), or operating procedures, call searchKnowledgeBase directly using a concise natural language query. 2) If the user asks to control hardware or enable/disable manual override, use toggleActuator (e.g. manual_mode_on, light_off, intake_on)."
                   }
                 ]
               },
               tools: [{
                 functionDeclarations: [
                   {
-                    name: "getKnowledgeBaseTopics",
-                    description: "Always call this FIRST when asked about the project's background, creators, or goals to see what keywords exist.",
-                    parameters: { type: "OBJECT", properties: {} }
-                  },
-                  {
                     name: "searchKnowledgeBase",
-                    description: "Searches the database for details using exact keywords obtained from getKnowledgeBaseTopics.",
+                    description: "Searches the BioArc engineering, operational, and biophysical knowledge base using natural language.",
                     parameters: {
                       type: "OBJECT",
                       properties: {
                         query: {
                           type: "STRING",
-                          description: "A comma-separated list of short root keywords."
+                          description: "The search query or natural language question."
                         }
                       },
                       required: ["query"]
