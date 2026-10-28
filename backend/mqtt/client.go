@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -19,7 +20,13 @@ func Init(cfg *config.Config) {
 	MLServiceURL = cfg.MLServiceURL
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(cfg.MQTTBroker)
-	opts.SetClientID(cfg.MQTTClientID)
+	
+	clientID := cfg.MQTTClientID
+	if clientID == "" {
+		clientID = "bioarc-go-backend"
+	}
+	clientID = fmt.Sprintf("%s-%d", clientID, time.Now().UnixNano()%100000)
+	opts.SetClientID(clientID)
 
 	if strings.HasPrefix(cfg.MQTTBroker, "tcps://") || strings.HasPrefix(cfg.MQTTBroker, "ssl://") || strings.HasPrefix(cfg.MQTTBroker, "tls://") {
 		tlsConfig := &tls.Config{
