@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
-import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw, Plus, Trash2, Layers, Search, FileText, Loader2 } from 'lucide-react';
+import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw, Plus, Trash2, Layers, Search, FileText, Loader2, FileUp } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
 export default function MaintenancePage() {
@@ -16,7 +16,7 @@ export default function MaintenancePage() {
   const { maintenanceLogs, hardwareLifespan, systemHealthSummary, lastAnalyzedAt, setMaintenanceData, telemetry, sendActionCommand } = useStore();
   const [mounted, setMounted] = useState(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState(false);
-  const [contextTab, setContextTab] = useState<'list' | 'add'>('list');
+  const [contextTab, setContextTab] = useState<'list' | 'add' | 'upload'>('list');
   const [knowledgeChunks, setKnowledgeChunks] = useState<any[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [chunkTitle, setChunkTitle] = useState('');
@@ -28,6 +28,14 @@ export default function MaintenancePage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Document Upload State (Zero-storage in-memory PDF/TXT ingestion)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadDocTitle, setUploadDocTitle] = useState('');
+  const [uploadCategory, setUploadCategory] = useState('biology');
+  const [customUploadCategory, setCustomUploadCategory] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   // Paginated system logs from Prisma database
   const [logs, setLogs] = useState<any[]>([]);
@@ -131,6 +139,51 @@ export default function MaintenancePage() {
       }
     } catch (e) {
       console.error('Failed to delete chunk:', e);
+    }
+  };
+
+  const handleUploadDocument = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    setUploadStatus('Extracting document in-memory & generating chunks...');
+
+    const finalCategory = uploadCategory === 'custom'
+      ? (customUploadCategory.trim().toLowerCase() || 'general')
+      : uploadCategory;
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('category', finalCategory);
+    if (uploadDocTitle.trim()) {
+      formData.append('title', uploadDocTitle.trim());
+    }
+
+    try {
+      setUploadStatus('Generating 768-dim embeddings in PostgreSQL...');
+      const res = await fetch('/api/context/upload', {
+        method: 'POST',
+        headers: { 'X-BioArc-Client': 'true' },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setUploadStatus(`Success! Indexed ${data.storedChunks} chunks across ${data.totalPages} page(s).`);
+        setSelectedFile(null);
+        setUploadDocTitle('');
+        setCustomUploadCategory('');
+        fetchKnowledgeChunks();
+        setTimeout(() => {
+          setContextTab('list');
+          setUploadStatus('');
+        }, 2200);
+      } else {
+        setUploadStatus(data.error || 'Upload failed');
+      }
+    } catch (e: any) {
+      setUploadStatus('Network error during upload');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -582,7 +635,18 @@ export default function MaintenancePage() {
                         }`}
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Add New Knowledge Chunk
+                        Add Chunk
+                      </button>
+                      <button
+                        onClick={() => { setContextTab('upload'); setUploadStatus(''); }}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold font-satoshi transition-all cursor-pointer ${
+                          contextTab === 'upload'
+                            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <FileUp className="w-3.5 h-3.5" />
+                        Upload Document (PDF / TXT)
                       </button>
                     </div>
 
@@ -761,6 +825,155 @@ export default function MaintenancePage() {
                               : 'bg-red-500/10 text-red-400 border border-red-500/20'
                           }`}>
                             {statusMessage}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TAB 3: UPLOAD DOCUMENT (PDF / TXT / MD) */}
+                    {contextTab === 'upload' && (
+                      <div className="flex flex-col gap-4">
+                        {/* Dropzone */}
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              const f = e.dataTransfer.files[0];
+                              setSelectedFile(f);
+                              if (!uploadDocTitle) {
+                                setUploadDocTitle(f.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+                              }
+                            }
+                          }}
+                          onClick={() => document.getElementById('kb-doc-upload')?.click()}
+                          className="border-2 border-dashed border-white/10 hover:border-emerald-500/40 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 transition-all cursor-pointer bg-black/20 hover:bg-emerald-500/[0.02]"
+                        >
+                          <input
+                            id="kb-doc-upload"
+                            type="file"
+                            accept=".pdf,.txt,.md,.markdown,.json,.csv,.log"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const f = e.target.files[0];
+                                setSelectedFile(f);
+                                if (!uploadDocTitle) {
+                                  setUploadDocTitle(f.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+                                }
+                              }
+                            }}
+                          />
+                          {selectedFile ? (
+                            <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 w-full max-w-md justify-between">
+                              <div className="flex items-center gap-3 truncate">
+                                <FileText className="w-6 h-6 shrink-0" />
+                                <div className="text-left truncate">
+                                  <p className="text-xs font-semibold text-white truncate">{selectedFile.name}</p>
+                                  <p className="text-[10px] text-emerald-400 font-mono">{(selectedFile.size / 1024).toFixed(1)} KB • Ready to Ingest</p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedFile(null);
+                                }}
+                                className="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400">
+                                <FileUp className="w-6 h-6" />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xs font-semibold text-white">Click or drag & drop a research paper or manual</p>
+                                <p className="text-[11px] text-zinc-500 mt-1">PDF, TXT, or Markdown (Max 20MB)</p>
+                                <span className="inline-block mt-2 px-2.5 py-0.5 rounded text-[10px] font-mono bg-white/5 text-zinc-400 border border-white/5">
+                                  Zero-storage: Parsed & vectorized in-memory
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Title Override */}
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Document Title</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Chlorella Photobioreactor Growth Kinetics Study (2024)"
+                            value={uploadDocTitle}
+                            onChange={(e) => setUploadDocTitle(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white text-xs focus:outline-none focus:border-emerald-500/50 transition-colors font-satoshi"
+                          />
+                        </div>
+
+                        {/* Category Selector */}
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Category</label>
+                          <select
+                            value={uploadCategory}
+                            onChange={(e) => setUploadCategory(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white text-xs focus:outline-none focus:border-emerald-500/50 transition-colors font-satoshi cursor-pointer"
+                          >
+                            <option value="biology">Biology (Cultivation parameters, Chlorella, Growth Rate)</option>
+                            <option value="hardware">Hardware (Sensors, ESP32, GPIO, Wiring, Tank Geometry)</option>
+                            <option value="operation">Operation (Manual Overrides, Relays, Harvesting, Refill)</option>
+                            <option value="safety">Safety (Emergency Shutdown, Safety Interlocks, Alarms)</option>
+                            <option value="troubleshooting">Troubleshooting (I2C collisions, WiFi/MQTT recovery)</option>
+                            <option value="architecture">Architecture (Dokploy, APIs, WebSockets, Monorepo layout)</option>
+                            <option value="team">Creators & Team (MindZed, founders, engineers, contact)</option>
+                            <option value="general">General & Overview (Project mission, purpose, background)</option>
+                            <option value="custom">Custom Category... (Type your own)</option>
+                          </select>
+                          {uploadCategory === 'custom' && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-1"
+                            >
+                              <input
+                                type="text"
+                                placeholder="Enter custom category name..."
+                                value={customUploadCategory}
+                                onChange={(e) => setCustomUploadCategory(e.target.value)}
+                                className="w-full bg-black/40 border border-emerald-500/40 rounded-xl px-4 py-2 text-white text-xs focus:outline-none focus:border-emerald-400 font-satoshi"
+                              />
+                            </motion.div>
+                          )}
+                        </div>
+
+                        {/* Ingest Action Button */}
+                        <button
+                          onClick={handleUploadDocument}
+                          disabled={isUploading || !selectedFile}
+                          className="w-full mt-2 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl px-4 py-3 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
+                        >
+                          {isUploading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>{uploadStatus || 'Processing Document...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileUp className="w-4 h-4" />
+                              <span>Ingest, Chunk & Vectorize Document</span>
+                            </>
+                          )}
+                        </button>
+
+                        {uploadStatus && !isUploading && (
+                          <div className={`text-center text-xs font-semibold p-3 rounded-xl ${
+                            uploadStatus.includes('Success') 
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {uploadStatus}
                           </div>
                         )}
                       </div>
