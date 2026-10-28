@@ -1,0 +1,149 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-surface: #0a0a0a;
+  --color-surface-dim: #0a0a0a;
+  --color-surface-bright: #27272a;
+  --color-surface-container-lowest: #000000;
+  --color-surface-container-low: #0a0a0a;
+  --color-surface-container: #121212;
+  --color-surface-container-high: #18181b;
+  --color-surface-container-highest: #27272a;
+  --color-on-surface: #fafafa;
+  --color-on-surface-variant: #a1a1aa;
+  --color-inverse-surface: #fafafa;
+  --color-inverse-on-surface: #18181b;
+  --color-outline: #52525b;
+  --color-outline-variant: #27272a;
+  --color-surface-tint: #10b981;
+  --color-primary: #10b981;
+  --color-on-primary: #022c22;
+  --color-primary-container: #059669;
+  --color-on-primary-container: #ecfdf5;
+  --color-inverse-primary: #047857;
+  --color-secondary: #2dd4bf;
+  --color-on-secondary: #042f2e;
+  --color-secondary-container: #0f766e;
+  --color-on-secondary-container: #ccfbf1;
+  --color-tertiary: #a78bfa;
+  --color-on-tertiary: #2e1065;
+  --color-tertiary-container: #5b21b6;
+  --color-on-tertiary-container: #ede9fe;
+  --color-error: #f87171;
+  --color-on-error: #450a0a;
+  --color-error-container: #991b1b;
+  --color-on-error-container: #fef2f2;
+  --color-primary-fixed: #34d399;
+  --color-primary-fixed-dim: #10b981;
+  --color-on-primary-fixed: #022c22;
+  --color-on-primary-fixed-variant: #064e3b;
+  --color-secondary-fixed: #5eead4;
+  --color-secondary-fixed-dim: #2dd4bf;
+  --color-on-secondary-fixed: #042f2e;
+  --color-on-secondary-fixed-variant: #115e59;
+  --color-tertiary-fixed: #c4b5fd;
+  --color-tertiary-fixed-dim: #a78bfa;
+  --color-on-tertiary-fixed: #2e1065;
+  --color-on-tertiary-fixed-variant: #4c1d95;
+  --color-background: #000000;
+  --color-on-background: #fafafa;
+  --color-surface-variant: #18181b;
+
+  --font-body-lg: var(--font-satoshi), sans-serif;
+  --font-headline-lg-mobile: var(--font-clash-display), sans-serif;
+  --font-label-md: var(--font-clash-display), sans-serif;
+  --font-headline-md: var(--font-clash-display), sans-serif;
+  --font-display-lg: var(--font-clash-display), sans-serif;
+  --font-label-sm: var(--font-clash-display), sans-serif;
+  --font-headline-lg: var(--font-clash-display), sans-serif;
+  --font-body-md: var(--font-satoshi), sans-serif;
+  
+  --font-clash: var(--font-clash-display), sans-serif;
+  --font-satoshi: var(--font-satoshi), sans-serif;
+
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-headline-lg-mobile: 24px;
+  --text-headline-lg-mobile--line-height: 30px;
+  --text-label-md: 14px;
+  --text-label-md--line-height: 20px;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 56px;
+  --text-label-sm: 12px;
+  --text-label-sm--line-height: 16px;
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-body-md: 16px;
+  --text-body-md--line-height: 24px;
+
+  --color-card: var(--color-surface-container-lowest);
+  --color-card-foreground: var(--color-on-surface);
+  --color-popover: var(--color-surface-container-lowest);
+  --color-popover-foreground: var(--color-on-surface);
+  --color-muted: var(--color-surface-container-low);
+  --color-muted-foreground: var(--color-on-surface-variant);
+  --color-accent: var(--color-surface-container);
+  --color-accent-foreground: var(--color-on-surface);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: var(--color-on-error);
+  --color-border: var(--color-outline-variant);
+  --color-input: var(--color-outline-variant);
+  --color-ring: var(--color-primary);
+  
+  --radius-sm: 0.25rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
+}
+
+@layer base {
+  * {
+    @apply border-outline-variant outline-ring/50;
+  }
+  body {
+    @apply bg-background text-on-surface;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Global Custom Green Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.3); /* emerald-500/30 */
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6); /* emerald-500/60 */
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.3) rgba(255, 255, 255, 0.02);
+}

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  ml-service:
+    build:
+      context: ../ml_service
+      dockerfile: Dockerfile
+    container_name: bioarc_ml_service
+    restart: unless-stopped
+    expose:
+      - "5000"
+    networks:
+      - bioarc_dokploy_net
+
+  go-backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: bioarc_go_backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgresql://usr_bioarc_reactor:qDUj2dVjA1vyOg9roG421VsS5cqctRQn@postgres-databases-sharedpostgres-kooq42:5432/db_bioarc_reactor_prod
+      - MQTT_BROKER=tcps://mqtt.mindzed.tech:8883
+      - MQTT_CLIENT_ID=bioarc-go-backend
+      - MQTT_USER=bioarc_v2
+      - MQTT_PASSWORD=bioarc4_v2
+      - ML_SERVICE_URL=http://ml-service:5000/predict
+    depends_on:
+      - ml-service
+    networks:
+      - bioarc_dokploy_net
+
+networks:
+  bioarc_dokploy_net:
+    driver: bridge

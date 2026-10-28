@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  title     String
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id])
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id])
+  role      String
+  content   String
+  createdAt DateTime    @default(now())
+}
+
+model ProjectContext {
+  id        String   @id @default(cuid())
+  keyword   String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  password     String
+  name         String?
+  role         String        @default("USER") // 'USER' or 'ADMIN'
+  chatSessions ChatSession[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Telemetry {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+
+  // FSM State
+  state String
+
+  // Environmental Data
+  waterTemp   Float
+  airTemp     Float
+  humidity    Float
+  pressure    Float
+  levelCm     Int
+  predictedPh Float @default(7.0)
+  predictedDo Float @default(6.5)
+
+  // Raw Optical Sensor Readings (TCS34725) - NEW
+  tcsR        Int?     @map("tcsR")
+  tcsG        Int?     @map("tcsG")
+  tcsB        Int?     @map("tcsB")
+  tcsC        Int?     @map("tcsC")
+
+  // Calculated Algae Growth & Biomass Metrics - NEW
+  greenRatio  Float?   @map("greenRatio")
+  grRatio     Float?   @map("grRatio")
+  pseudoOd    Float?   @map("pseudoOd")
+  vegIndex    Float?   @map("vegIndex")
+  chlAUgl     Float?   @map("chlAUgl")      // Chlorophyll-a concentration (µg/L)
+  growthRateU Float?   @map("growthRateU")  // Specific growth rate (µ)
+  hasBaseline Boolean? @map("hasBaseline")
+
+  // Actuator States
+  relayIntake   Boolean
+  relayOuttake  Boolean
+  relayAir      Boolean
+  relayLight    Boolean
+  relayAgitator Boolean
+
+  @@index([timestamp(sort: Desc)]) // Optimize for time-series querying
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  level     String // "info", "warning", "critical"
+  message   String
+
+  @@index([timestamp(sort: Desc)])
+}
+
+model DeviceConfig {
+  id        String   @id @default(uuid())
+  updatedAt DateTime @updatedAt
+
+  lightOnHr      Int     @default(8)
+  lightOffHr     Int     @default(20)
+  enableLights   Boolean @default(true)
+  enableAir      Boolean @default(true)
+  enableAgitator Boolean @default(true)
+  enableRefill   Boolean @default(true)
+}
+
+model ComponentStat {
+  id              String   @id @default(uuid())
+  componentId     String   @unique // "relay-intake", "relay-outtake", "relay-air", "relay-agitator", "relay-light", "sensor-ultrasonic", "sensor-color", "sensor-ph", "sensor-temp"
+  name            String
+  type            String   // "pump", "compressor", "motor", "light", "sensor"
+  totalToggles    Int      @default(0)
+  totalRuntimeSec Int      @default(0)
+  ratedToggles    Int      @default(50000)
+  ratedRuntimeSec Int      @default(18000000) // e.g. 5000 hours in seconds
+  currentHealthPct Float   @default(100.0)
+  status          String   @default("NOMINAL") // "NOMINAL", "WARNING", "CRITICAL"
+  aiReason        String?
+  updatedAt       DateTime @updatedAt
+}
+
+model MaintenanceAnalysisCache {
+  id                  String   @id @default("default")
+  lastAnalyzedAt      DateTime @default(now())
+  agitatorStatus      String   @default("OPTIMAL STATUS")
+  agitatorSummary     String   @default("Magnetic sweep and motor impedance sensors suggest nominal wear on the primary bioreactor agitation unit. Next scheduled maintenance is estimated in 1,200 operating hours.")
+  systemHealthSummary String?
+  rawAiResponse       String?
+}
+
+model TelegramConfig {
+  id              String   @id @default("default")
+  botToken        String?
+  notifyCritical  Boolean  @default(true)
+  notifyWarnings  Boolean  @default(true)
+  notifyHourlyAi  Boolean  @default(true)
+  notifyFsmChange Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+}
+
+model AuthorizedTelegramUser {
+  id         String   @id @default(uuid())
+  name       String   // e.g. "Noor Hasan (Lead Engineer)"
+  chatId     String   @unique // Telegram Chat ID (e.g. "1374076289")
+  username   String?  // Optional username (e.g. "@tele_mute9246")
+  role       String   @default("OPERATOR") // ADMIN, OPERATOR
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}

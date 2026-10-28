@@ -1,0 +1,27 @@
+================================================================================
+BIOARC PRODUCTION VERCEL ENVIRONMENT VARIABLES
+Copy and paste these values into your Vercel Project Settings -> Environment Variables:
+================================================================================
+
+DATABASE_URL=postgresql://usr_bioarc_reactor:YOUR_DB_PASSWORD_HERE@129.154.34.1:6432/db_bioarc_reactor_prod?sslmode=disable&pgbouncer=true&connection_limit=1
+
+NEXT_PUBLIC_GO_API_URL=https://bioarc_backend.mindzed.tech
+
+NEXT_PUBLIC_GO_WS_URL=wss://bioarc_backend.mindzed.tech/ws
+
+ADMIN_PASSWORD=bioarc-admin
+
+NEXTAUTH_SECRET=YOUR_32_CHAR_NEXTAUTH_SECRET_HERE
+
+AI_PROVIDER=google
+
+AI_MODEL=gemini-2.5-flash
+
+GOOGLE_GENERATIVE_AI_API_KEY=YOUR_GOOGLE_GENERATIVE_AI_API_KEY_HERE
+
+================================================================================
+NOTES:
+1. DATABASE_URL connects through your dedicated PgBouncer instance on port 6432.
+2. NEXT_PUBLIC_GO_API_URL and NEXT_PUBLIC_GO_WS_URL connect live to your Dokploy Go Backend.
+3. Replace YOUR_DB_PASSWORD_HERE and YOUR_GOOGLE_GENERATIVE_AI_API_KEY_HERE with your live keys in Vercel.
+================================================================================

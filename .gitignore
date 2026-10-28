@@ -1,0 +1,61 @@
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env*
+!.env.example
+!.env.template
+!.env.dokploy.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Node & Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.turbo/
+*.tsbuildinfo
+
+# PlatformIO & Embedded
+.pio/
+.pioenvs/
+.piolibdeps/
+*.bin
+*.elf
+*.hex
+
+# Python & ML
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.pytest_cache/
+
+# Go
+server.exe
+*.exe
+*.test
+*.prof
+
+# IDE & OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Temporary directories
+scratch/
