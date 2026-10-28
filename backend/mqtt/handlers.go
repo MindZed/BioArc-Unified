@@ -61,8 +61,27 @@ func fetchMLPredictions(payload models.MQTTTelemetryPayload) (float64, float64) 
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Post(MLServiceURL, "application/json", bytes.NewBuffer(jsonBytes))
 	if err != nil {
-		log.Printf("ML Service request error: %v", err)
-		return defaultPh, defaultDo
+		// Attempt fallback URLs (in case running inside Dokploy Swarm)
+		fallbacks := []string{
+			"http://bioarc-reactor-bioarcmlservice-fde9eh:5000/predict",
+			"http://ml-service:5000/predict",
+		}
+		var fallbackSuccess bool
+		for _, fb := range fallbacks {
+			if fb == MLServiceURL {
+				continue
+			}
+			if fbResp, fbErr := client.Post(fb, "application/json", bytes.NewBuffer(jsonBytes)); fbErr == nil && fbResp.StatusCode == http.StatusOK {
+				resp = fbResp
+				err = nil
+				fallbackSuccess = true
+				break
+			}
+		}
+		if !fallbackSuccess {
+			log.Printf("ML Service request error: %v", err)
+			return defaultPh, defaultDo
+		}
 	}
 	defer resp.Body.Close()
 

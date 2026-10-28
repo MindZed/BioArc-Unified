@@ -31,7 +31,7 @@ func LoadConfig() *Config {
 		MQTTUser:     getEnv("MQTT_USER", ""),
 		MQTTPassword: getEnv("MQTT_PASSWORD", ""),
 		Port:         getEnv("PORT", "8080"),
-		MLServiceURL: getEnv("ML_SERVICE_URL", "http://localhost:5000/predict"),
+		MLServiceURL: getEnv("ML_SERVICE_URL", "http://bioarc-reactor-bioarcmlservice-fde9eh:5000/predict"),
 	}
 }
 
