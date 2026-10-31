@@ -402,6 +402,80 @@ export default function MaintenancePage() {
             </div>
           </motion.div>
 
+          {/* ULTRASONIC LEVEL SENSOR & BENCH CALIBRATION */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+            className="bg-black/40 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between group hover:border-cyan-500/30 transition-all duration-500"
+          >
+            <div className="flex-1 flex flex-col h-full z-10">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                    <Layers className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-clash text-lg font-semibold text-white tracking-wide">Ultrasonic Tank Calibration</h3>
+                    <p className="text-zinc-400 font-satoshi text-xs">JSN-SR04T Liquid Level & 2-Point Geometry</p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => sendActionCommand('pulse_intake')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all text-xs font-satoshi font-semibold text-cyan-400 hover:text-white"
+                      title="Run intake pump for 5 seconds to test flow/priming"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Jog Intake (5s)
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 my-2">
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Raw Air Gap</span>
+                  <span className="text-base font-bold font-mono text-cyan-400 mt-1">
+                    {(telemetry?.rawDistanceCm ?? 0)} cm
+                  </span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Liquid Level</span>
+                  <span className="text-base font-bold font-mono text-emerald-400 mt-1">
+                    {(telemetry?.reservoirVolume ?? 0).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col col-span-2 sm:col-span-1">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Sensor Status</span>
+                  <span className="text-xs font-bold font-mono text-emerald-400 mt-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Active
+                  </span>
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className="mt-3 pt-3 border-t border-white/[0.05] flex flex-wrap gap-2">
+                  <button 
+                    onClick={() => sendActionCommand('set_dist_empty')}
+                    className="flex-1 min-w-[120px] py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-satoshi font-semibold text-amber-300 hover:text-white transition-all text-center"
+                    title="Calibrates the current distance as EMPTY (0% level)"
+                  >
+                    Set As Empty (0%)
+                  </button>
+                  <button 
+                    onClick={() => sendActionCommand('set_dist_full')}
+                    className="flex-1 min-w-[120px] py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-xs font-satoshi font-semibold text-emerald-300 hover:text-white transition-all text-center"
+                    title="Calibrates the current distance as FULL (100% level)"
+                  >
+                    Set As Full (100%)
+                  </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
           {/* AI HARDWARE STATUS REVIEW */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}

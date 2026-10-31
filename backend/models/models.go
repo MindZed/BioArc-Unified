@@ -32,6 +32,9 @@ type Telemetry struct {
 	RelayAir      bool      `gorm:"column:relayAir;not null" json:"relayAir"`
 	RelayLight    bool      `gorm:"column:relayLight;not null" json:"relayLight"`
 	RelayAgitator bool      `gorm:"column:relayAgitator;not null" json:"relayAgitator"`
+	RelayFan      bool      `gorm:"column:relayFan" json:"relayFan"`
+	DevMode       bool      `gorm:"column:devMode" json:"devMode"`
+	RawDistanceCm int       `gorm:"column:rawDistanceCm" json:"rawDistanceCm"`
 }
 
 func (Telemetry) TableName() string {
@@ -69,18 +72,22 @@ func (DeviceConfig) TableName() string {
 // MQTT Payload Models
 
 type MQTTTelemetryPayload struct {
-	State     string  `json:"state"`
-	WaterTemp float64 `json:"water_temp"`
-	AirTemp   float64 `json:"air_temp"`
-	Humidity  float64 `json:"humidity"`
-	Pressure  float64 `json:"pressure"`
-	LevelCm   int     `json:"level_cm"`
-	Relays    struct {
+	State         string  `json:"state"`
+	WaterTemp     float64 `json:"water_temp"`
+	AirTemp       float64 `json:"air_temp"`
+	Humidity      float64 `json:"humidity"`
+	Pressure      float64 `json:"pressure"`
+	LevelCm       int     `json:"level_cm"`
+	RawDistanceCM int     `json:"rawDistanceCM,omitempty"`
+	DevMode       bool    `json:"devMode,omitempty"`
+	FanOn         bool    `json:"fanOn,omitempty"`
+	Relays        struct {
 		Intake   bool `json:"intake"`
 		Outtake  bool `json:"outtake"`
 		Air      bool `json:"air"`
 		Light    bool `json:"light"`
 		Agitator bool `json:"agitator"`
+		Fan      bool `json:"fan,omitempty"`
 	} `json:"relays"`
 	// Support both legacy lowercase tags and new ESP32 uppercase tags
 	Water_Temp_C       float64 `json:"Water_Temp_C,omitempty"`
@@ -141,6 +148,17 @@ func (m MQTTTelemetryPayload) GetWaterTemp() float64 {
 		return m.Water_Temp_C
 	}
 	return m.WaterTemp
+}
+
+func (m MQTTTelemetryPayload) IsFanOn() bool {
+	return m.FanOn || m.Relays.Fan
+}
+
+func (m MQTTTelemetryPayload) GetRawDistance() int {
+	if m.RawDistanceCM != 0 {
+		return m.RawDistanceCM
+	}
+	return m.LevelCm
 }
 
 type MQTTLogPayload struct {

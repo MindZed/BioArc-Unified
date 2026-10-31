@@ -40,15 +40,13 @@
 #define TRIG_PIN 18
 #define ECHO_PIN 19
 
-#define RELAY_INTAKE 33     // Active-LOW (Intake Solenoid)
+#define RELAY_INTAKE 33     // Active-LOW (Intake Solenoid / Pump)
 #define RELAY_LIGHT 32      // Active-HIGH (Grow Lights replacement module)
 #define SSR1_AIR_PUMP 25    // Active-LOW (Aeration Sparger)
 #define RELAY_OUTTAKE 26    // Active-LOW (Harvest Drain)
 #define RELAY_AGITATOR 27   // Active-LOW (Agitator Motor)
+#define RELAY_FAN 23        // Active-LOW (12V Chamber Exhaust Fan)
 
-// Tank Distance Calibrations (cm)
-const int DIST_EMPTY = 33;
-const int DIST_FULL = 8;
 const int DIST_REFILL_TRIG = 4;
 
 // ==========================================
@@ -80,7 +78,10 @@ struct SysConfig {
     bool enableAir;
     bool enableAgitator;
     bool enableAutoRefill;
+    bool enableFan;
     uint8_t fillPct;
+    int distEmpty;
+    int distFull;
     float chlCalibK;
     float harvestOD;
     float crashDeltaOD;
@@ -97,7 +98,7 @@ struct NetworkConfig {
 } netConfig;
 
 int getEffectiveDistFull() {
-    return DIST_EMPTY - ((DIST_EMPTY - DIST_FULL) * config.fillPct / 100);
+    return config.distEmpty - ((config.distEmpty - config.distFull) * config.fillPct / 100);
 }
 
 void loadConfig() {
@@ -108,7 +109,10 @@ void loadConfig() {
     config.enableAir = preferences.getBool("enAir", true);
     config.enableAgitator = preferences.getBool("enAgitator", true);
     config.enableAutoRefill = preferences.getBool("enRefill", true);
+    config.enableFan = preferences.getBool("enFan", true);
     config.fillPct = preferences.getUChar("fillPct", 100);
+    config.distEmpty = preferences.getInt("distEmpty", 33);
+    config.distFull = preferences.getInt("distFull", 8);
     config.chlCalibK = preferences.getFloat("chlCalibK", 850.0f);
     config.harvestOD = preferences.getFloat("harvestOD", 1.5f);
     config.crashDeltaOD = preferences.getFloat("crashDOD", 0.5f);
@@ -128,7 +132,10 @@ void saveConfig() {
     preferences.putBool("enAir", config.enableAir);
     preferences.putBool("enAgitator", config.enableAgitator);
     preferences.putBool("enRefill", config.enableAutoRefill);
+    preferences.putBool("enFan", config.enableFan);
     preferences.putUChar("fillPct", config.fillPct);
+    preferences.putInt("distEmpty", config.distEmpty);
+    preferences.putInt("distFull", config.distFull);
     preferences.putFloat("chlCalibK", config.chlCalibK);
     preferences.putFloat("harvestOD", config.harvestOD);
     preferences.putFloat("crashDOD", config.crashDeltaOD);
@@ -168,11 +175,14 @@ struct TelemetrySnapshot {
     float humidity;
     float pressure;
     int distanceCM;
+    int rawDistanceCM;
     bool intakeOn;
     bool outtakeOn;
     bool airOn;
     bool lightOn;
     bool agitatorOn;
+    bool fanOn;
+    bool devMode;
     uint16_t tcsR, tcsG, tcsB, tcsC;
     float greenRatio;
     float grRatio;
@@ -195,7 +205,7 @@ TelemetrySnapshot sharedTelemetry;
 // ==========================================
 // FREERTOS SYNCHRONIZATION PRIMITIVES
 // ==========================================
-SemaphoreHandle_t xI2CMutex = NULL;      // Guards shared I2C bus (BME280, TCS34725, Dual LCDs, RTC)
+SemaphoreHandle_t xI2CMutex = NULL;      // Guards shared I2C bus (BME280, TCS34725, OLED, RTC)
 SemaphoreHandle_t xStateMutex = NULL;    // Guards shared telemetry data & SysConfig
 QueueHandle_t xCommandQueue = NULL;      // Dispatches command actions to FSM task
 EventGroupHandle_t xControlEvents = NULL; // Coordinates asynchronous sampling & telemetry events
@@ -212,17 +222,20 @@ TimeManager timeManager;
 WaterTempSensor waterTemp(ONE_WIRE_BUS);
 EnvironmentSensor envSensor;
 LevelSensor waterLevel(TRIG_PIN, ECHO_PIN, 100);
-DisplayManager displays(0x27, 0x25);
-RelayManager relays(RELAY_LIGHT, RELAY_INTAKE, RELAY_OUTTAKE, SSR1_AIR_PUMP, RELAY_AGITATOR);
+DisplayManager displays(0x3C);
+RelayManager relays(RELAY_LIGHT, RELAY_INTAKE, RELAY_OUTTAKE, SSR1_AIR_PUMP, RELAY_AGITATOR, RELAY_FAN);
 MqttManager mqtt;
 ColorSensor colorSensor;
 CaptivePortal portal;
 
 // FSM Internal State Variables (Controlled by Task_FSM_Control)
 FSM_State currentState = STATE_AWAITING_COMMISSION;
+bool devMode = false;
 unsigned long actionStartTime = 0;
 unsigned long pumpOvershootTimer = 0;
 bool overshootActive = false;
+unsigned long pulseIntakeTimer = 0;
+bool pulseIntakeActive = false;
 int targetDistance = 0;
 int lastAgitationHour = -1;
 int lastAgitationMin = -1;
@@ -358,6 +371,9 @@ String getTelemetryJSON() {
         doc["aTemp"] = sharedTelemetry.airTemp;
         doc["hum"] = sharedTelemetry.humidity;
         doc["level"] = sharedTelemetry.distanceCM;
+        doc["rawDistanceCM"] = sharedTelemetry.rawDistanceCM;
+        doc["fanOn"] = sharedTelemetry.fanOn;
+        doc["devMode"] = sharedTelemetry.devMode;
         doc["tcsR"] = sharedTelemetry.tcsR;
         doc["tcsG"] = sharedTelemetry.tcsG;
         doc["tcsB"] = sharedTelemetry.tcsB;
@@ -440,7 +456,7 @@ void Task_FSM_Control(void* pvParameters) {
             else if (action == "drain_all") {
                 mqtt.publishLog("info", "Manual Drain (Complete) Initiated.");
                 currentState = STATE_HARVEST;
-                targetDistance = DIST_EMPTY; 
+                targetDistance = config.distEmpty; 
                 relays.setOuttake(true);
                 overshootActive = false;
                 actionStartTime = millis();
@@ -484,6 +500,55 @@ void Task_FSM_Control(void* pvParameters) {
                 demoStep = 0;
                 demoStepStart = millis();
             }
+            else if (action == "dev_mode_on") {
+                devMode = true;
+                currentState = STATE_MANUAL_OVERRIDE;
+                mqtt.publishLog("warning", "DEV MODE Enabled. Autonomous schedules paused.");
+            }
+            else if (action == "dev_mode_off") {
+                devMode = false;
+                relays.stopAll();
+                currentState = STATE_IDLE;
+                mqtt.publishLog("info", "DEV MODE Disabled. Resuming IDLE.");
+            }
+            else if (action == "fan_on") {
+                relays.setExhaustFan(true);
+                mqtt.publishLog("info", "Exhaust Fan Manual ON");
+            }
+            else if (action == "fan_off") {
+                relays.setExhaustFan(false);
+                mqtt.publishLog("info", "Exhaust Fan Manual OFF");
+            }
+            else if (action == "pulse_intake") {
+                relays.setIntake(true);
+                pulseIntakeTimer = millis();
+                pulseIntakeActive = true;
+                mqtt.publishLog("info", "Pulsing Intake Pump (5s jog)...");
+            }
+            else if (action == "set_dist_empty") {
+                int curD = 0;
+                if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    curD = sharedTelemetry.distanceCM;
+                    config.distEmpty = curD;
+                    saveConfig();
+                    xSemaphoreGive(xStateMutex);
+                }
+                char lBuf[64];
+                snprintf(lBuf, sizeof(lBuf), "Calibrated Empty Distance: %d cm", curD);
+                mqtt.publishLog("info", lBuf);
+            }
+            else if (action == "set_dist_full") {
+                int curD = 0;
+                if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    curD = sharedTelemetry.distanceCM;
+                    config.distFull = curD;
+                    saveConfig();
+                    xSemaphoreGive(xStateMutex);
+                }
+                char lBuf[64];
+                snprintf(lBuf, sizeof(lBuf), "Calibrated Full Distance: %d cm", curD);
+                mqtt.publishLog("info", lBuf);
+            }
             else if (action == "manual_mode_on") {
                 if (currentState == STATE_IDLE || currentState == STATE_HAZARD || currentState == STATE_AWAITING_COMMISSION) {
                     currentState = STATE_MANUAL_OVERRIDE;
@@ -497,7 +562,7 @@ void Task_FSM_Control(void* pvParameters) {
                     mqtt.publishLog("info", "Manual Override DISABLED. Resuming IDLE.");
                 }
             }
-            else if (currentState == STATE_MANUAL_OVERRIDE) {
+            else if (currentState == STATE_MANUAL_OVERRIDE || devMode) {
                 if (action == "intake_on") relays.setIntake(true);
                 else if (action == "intake_off") relays.setIntake(false);
                 else if (action == "outtake_on") relays.setOuttake(true);
@@ -508,6 +573,8 @@ void Task_FSM_Control(void* pvParameters) {
                 else if (action == "light_off") relays.setLight(false);
                 else if (action == "agitator_on") relays.setAgitator(true);
                 else if (action == "agitator_off") relays.setAgitator(false);
+                else if (action == "fan_on") relays.setExhaustFan(true);
+                else if (action == "fan_off") relays.setExhaustFan(false);
             }
             
             xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
@@ -546,12 +613,44 @@ void Task_FSM_Control(void* pvParameters) {
             isDaytime = (currentHr >= config.lightOnHr || currentHr < config.lightOffHr);
         }
 
-        if (currentState != STATE_MANUAL_OVERRIDE && !demoMode) {
+        if (currentState != STATE_MANUAL_OVERRIDE && !demoMode && !devMode) {
             if (config.enableLights && currentState != STATE_HAZARD) {
                 relays.setLight(isDaytime);
             } else {
                 relays.setLight(false);
             }
+        }
+
+        // 4b. Exhaust Fan Evaluation (Ideas 1, 4 & 5)
+        if (!devMode && currentState != STATE_HAZARD && currentState != STATE_MANUAL_OVERRIDE) {
+            float currentAirTemp = 0.0f;
+            if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+                currentAirTemp = sharedTelemetry.airTemp;
+                xSemaphoreGive(xStateMutex);
+            }
+
+            if (config.enableFan) {
+                bool shouldFanRun = false;
+                if (currentWTemp >= 34.0f && currentWTemp != -127.0f && currentWTemp != 85.0f) {
+                    shouldFanRun = true;
+                } else if (currentAirTemp >= 33.0f && currentAirTemp < 80.0f) {
+                    shouldFanRun = true;
+                } else if (relays.isLightOn() && currentAirTemp >= 30.0f && currentAirTemp < 80.0f) {
+                    shouldFanRun = true;
+                } else if (relays.isExhaustFanOn()) {
+                    if ((currentWTemp > 31.5f && currentWTemp != -127.0f && currentWTemp != 85.0f) || currentAirTemp > 30.0f) {
+                        shouldFanRun = true;
+                    }
+                }
+                relays.setExhaustFan(shouldFanRun);
+            }
+        }
+
+        // 4c. Timed Intake Pulse Jog Evaluation
+        if (pulseIntakeActive && (millis() - pulseIntakeTimer >= 5000)) {
+            relays.setIntake(false);
+            pulseIntakeActive = false;
+            mqtt.publishLog("info", "Intake pulse jog complete (5s).");
         }
 
         // 5. Finite State Machine Transitions
@@ -616,8 +715,7 @@ void Task_FSM_Control(void* pvParameters) {
                         relays.setIntake(false);
                         overshootActive = false;
                         currentState = STATE_IDLE;
-                        mqtt.publishLog("info", "Commissioning complete! Capturing baseline...");
-                        xEventGroupSetBits(xControlEvents, EVENT_CALIBRATE_BASELINE);
+                        mqtt.publishLog("info", "Commissioning fill complete. Transitioned to IDLE.");
                     }
                     if (millis() - actionStartTime > 300000) {
                         triggerHazard("Commission Fill Timeout! Stopped to prevent flood.");
@@ -694,7 +792,7 @@ void Task_FSM_Control(void* pvParameters) {
                     if (overshootActive && (millis() - pumpOvershootTimer >= 3000)) {
                         relays.setOuttake(false);
                         overshootActive = false;
-                        if (targetDistance == DIST_EMPTY) {
+                        if (targetDistance == config.distEmpty) {
                             mqtt.publishLog("info", "Manual drain complete.");
                             currentState = STATE_AWAITING_COMMISSION;
                         } else {
@@ -723,6 +821,9 @@ void Task_FSM_Control(void* pvParameters) {
             sharedTelemetry.airOn = relays.isAirOn();
             sharedTelemetry.lightOn = relays.isLightOn();
             sharedTelemetry.agitatorOn = relays.isAgitatorOn();
+            sharedTelemetry.fanOn = relays.isExhaustFanOn();
+            sharedTelemetry.devMode = devMode;
+            sharedTelemetry.rawDistanceCM = currentDist;
             sharedTelemetry.isDaytime = isDaytime;
             xSemaphoreGive(xStateMutex);
         }
@@ -774,8 +875,11 @@ void Task_Sensors(void* pvParameters) {
         if (!sensorsReady && (millis() - systemReadyTime > 6000)) {
             sensorsReady = true;
             int dist = waterLevel.getDistanceCM();
-            if (dist < (DIST_EMPTY - 2) && dist > 0) {
-                currentState = STATE_IDLE; // Water already present
+            if (dist < (config.distEmpty - 2) && dist > 0 && currentState != STATE_HAZARD) {
+                int threshold80 = config.distEmpty - ((config.distEmpty - config.distFull) * 80 / 100);
+                if (dist <= threshold80) {
+                    currentState = STATE_IDLE; // Water already present at optimal level
+                }
             }
             mqtt.publishLog("info", ("System Booted. Reason: " + bootReasonStr).c_str());
         }
@@ -1011,6 +1115,8 @@ void Task_Dual_Display(void* pvParameters) {
         if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             displays.setSystemData(stateNames[snap.state], snap.ipStr, snap.wifiConnected, snap.mqttConnected);
             displays.setTelemetryData(snap.waterTemp, snap.airTemp, snap.humidity, snap.distanceCM, snap.timeStr);
+            displays.setDevData(snap.devMode, snap.rawDistanceCM, snap.fanOn);
+            displays.setActuatorStates(snap.lightOn, snap.airOn, snap.intakeOn, snap.outtakeOn, snap.agitatorOn, snap.fanOn);
             displays.update();
             xSemaphoreGive(xI2CMutex);
         }
@@ -1057,10 +1163,34 @@ void setup() {
     waterLevel.begin();
     relays.begin();
 
-    // 5. Pre-Flight Diagnostics
+    // 5. Ultrasonic Settling & Boot FSM State Authority Decision
+    Serial.println("[SYSTEM] Sampling ultrasonic level sensor for boot authority...");
+    delay(200);
+    for (int i = 0; i < 15; i++) {
+        waterLevel.update();
+        delay(50);
+    }
+
+    int bootDist = waterLevel.getDistanceCM();
+    if (waterLevel.isFaulty() || bootDist <= 0) {
+        currentState = STATE_HAZARD;
+        Serial.println("[CRITICAL] Level sensor stopped or disconnected on boot! Tripping HAZARD.");
+    } else {
+        // 80% full threshold = distEmpty - ((distEmpty - distFull) * 80 / 100)
+        int threshold80 = config.distEmpty - ((config.distEmpty - config.distFull) * 80 / 100);
+        if (bootDist > threshold80) {
+            currentState = STATE_AWAITING_COMMISSION;
+            Serial.printf("[SYSTEM] Chamber dry or low (Dist: %d cm > %d cm threshold). Awaiting 'fill' command.\n", bootDist, threshold80);
+        } else {
+            currentState = STATE_IDLE;
+            Serial.printf("[SYSTEM] Water level optimal (Dist: %d cm <= %d cm threshold). Resuming IDLE schedules.\n", bootDist, threshold80);
+        }
+    }
+
+    // 6. Pre-Flight Diagnostics
     runPreFlightDiagnostics();
 
-    // 6. Captive Portal & Dynamic Config Callbacks
+    // 7. Captive Portal & Dynamic Config Callbacks
     portal.setCommandCallback(dispatchCommand);
     portal.setTelemetryCallback(getTelemetryJSON);
     portal.setNetworkConfigCallbacks(

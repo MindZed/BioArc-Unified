@@ -20,6 +20,9 @@ export interface TelemetryData {
   tcsB?: number;
   tcsC?: number;
   hasBaseline?: boolean;
+  rawDistanceCm?: number;
+  devMode?: boolean;
+  fanOn?: boolean;
 }
 
 export interface FSMState {
@@ -29,6 +32,8 @@ export interface FSMState {
   airCompressor: boolean;
   agitator: boolean;
   ledPanels: boolean;
+  exhaustFan: boolean;
+  devMode: boolean;
 }
 
 export function generateMockTelemetry(): TelemetryData {
@@ -73,6 +78,8 @@ export function generateMockFSM(): FSMState {
     airCompressor: Math.random() > 0.3,
     agitator: Math.random() > 0.1,
     ledPanels: Math.random() > 0.05,
+    exhaustFan: false,
+    devMode: false,
   };
 }
 

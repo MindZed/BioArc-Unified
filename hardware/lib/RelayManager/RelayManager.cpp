@@ -1,22 +1,24 @@
 #include "RelayManager.h"
 #include <TelnetStream.h>
 
-RelayManager::RelayManager(uint8_t pinLight, uint8_t pinIntake, uint8_t pinOuttake, uint8_t pinAir, uint8_t pinAgitator)
-    : _pinLight(pinLight), _pinIntake(pinIntake), _pinOuttake(pinOuttake), _pinAir(pinAir), _pinAgitator(pinAgitator) {
+RelayManager::RelayManager(uint8_t pinLight, uint8_t pinIntake, uint8_t pinOuttake, uint8_t pinAir, uint8_t pinAgitator, uint8_t pinFan)
+    : _pinLight(pinLight), _pinIntake(pinIntake), _pinOuttake(pinOuttake), _pinAir(pinAir), _pinAgitator(pinAgitator), _pinFan(pinFan) {
     _lightOn = false;
     _intakeOn = false;
     _outtakeOn = false;
     _airOn = false;
     _agitatorOn = false;
+    _fanOn = false;
 
     // Default Hardware Configuration:
     // Grow Lights (Pin 32) is Active-HIGH (single-channel replacement)
-    // All other 4 channels on the 2-channel relay boards + SSR are Active-LOW
+    // All other relay channels (including Fan on GPIO 23) are Active-LOW
     _lightActiveHigh = true;
     _intakeActiveHigh = false;
     _outtakeActiveHigh = false;
     _airActiveHigh = false;
     _agitatorActiveHigh = false;
+    _fanActiveHigh = false;
 }
 
 void RelayManager::begin() {
@@ -25,18 +27,20 @@ void RelayManager::begin() {
     pinMode(_pinOuttake, OUTPUT);
     pinMode(_pinAir, OUTPUT);
     pinMode(_pinAgitator, OUTPUT);
+    pinMode(_pinFan, OUTPUT);
 
     stopAll(); // Ensure everything is OFF at boot
-    Serial.println("[SYSTEM] Relay Manager Initialized (Configurable Polarity).");
-    TelnetStream.println("[SYSTEM] Relay Manager Initialized.");
+    Serial.println("[SYSTEM] Relay Manager Initialized (6 Channels with Exhaust Fan).");
+    TelnetStream.println("[SYSTEM] Relay Manager Initialized (6 Channels with Exhaust Fan).");
 }
 
-void RelayManager::setPolarity(bool lightActiveHigh, bool intakeActiveHigh, bool outtakeActiveHigh, bool airActiveHigh, bool agitatorActiveHigh) {
+void RelayManager::setPolarity(bool lightActiveHigh, bool intakeActiveHigh, bool outtakeActiveHigh, bool airActiveHigh, bool agitatorActiveHigh, bool fanActiveHigh) {
     _lightActiveHigh = lightActiveHigh;
     _intakeActiveHigh = intakeActiveHigh;
     _outtakeActiveHigh = outtakeActiveHigh;
     _airActiveHigh = airActiveHigh;
     _agitatorActiveHigh = agitatorActiveHigh;
+    _fanActiveHigh = fanActiveHigh;
 }
 
 void RelayManager::setRelay(uint8_t pin, bool turnOn) {
@@ -46,6 +50,7 @@ void RelayManager::setRelay(uint8_t pin, bool turnOn) {
     else if (pin == _pinOuttake) activeHigh = _outtakeActiveHigh;
     else if (pin == _pinAir) activeHigh = _airActiveHigh;
     else if (pin == _pinAgitator) activeHigh = _agitatorActiveHigh;
+    else if (pin == _pinFan) activeHigh = _fanActiveHigh;
     
     if (activeHigh) {
         digitalWrite(pin, turnOn ? HIGH : LOW);
@@ -79,10 +84,16 @@ void RelayManager::setAgitator(bool state) {
     setRelay(_pinAgitator, state);
 }
 
+void RelayManager::setExhaustFan(bool state) {
+    _fanOn = state;
+    setRelay(_pinFan, state);
+}
+
 void RelayManager::stopAll() {
     setLight(false);
     setIntake(false);
     setOuttake(false);
     setAir(false);
     setAgitator(false);
+    setExhaustFan(false);
 }

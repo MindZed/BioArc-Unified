@@ -38,6 +38,11 @@ interface BioArcStore {
   sendConfigCommand: (config: any) => Promise<boolean>;
   updateTelemetry: () => void;
   updateFSM: () => void;
+  toggleDevMode: () => Promise<boolean>;
+  toggleExhaustFan: () => Promise<boolean>;
+  setDistEmpty: () => Promise<boolean>;
+  setDistFull: () => Promise<boolean>;
+  pulseIntake: () => Promise<boolean>;
   
   // UI & App Actions
   toggleSidebar: () => void;
@@ -115,6 +120,9 @@ export const useStore = create<BioArcStore>((set, get) => ({
       tcsB: t.tcsB ?? t.TCS34725_B ?? t.tcs_b ?? state.telemetry.tcsB,
       tcsC: t.tcsC ?? t.TCS34725_C ?? t.tcs_c ?? state.telemetry.tcsC,
       hasBaseline: t.hasBaseline ?? t.has_baseline ?? state.telemetry.hasBaseline,
+      rawDistanceCm: t.rawDistanceCm ?? t.rawDistanceCM ?? t.raw_distance_cm ?? state.telemetry.rawDistanceCm,
+      devMode: t.devMode ?? t.dev_mode ?? state.telemetry.devMode,
+      fanOn: t.relayFan ?? t.fanOn ?? t.relays?.fan ?? state.telemetry.fanOn,
     };
 
     const incomingState = t.state || state.fsmCurrentState;
@@ -130,6 +138,8 @@ export const useStore = create<BioArcStore>((set, get) => ({
       airCompressor: t.relayAir ?? t.relays?.air ?? state.fsm.airCompressor,
       ledPanels: t.relayLight ?? t.relays?.light ?? state.fsm.ledPanels,
       agitator: t.relayAgitator ?? t.relays?.agitator ?? state.fsm.agitator,
+      exhaustFan: t.relayFan ?? t.fanOn ?? t.relays?.fan ?? state.fsm.exhaustFan,
+      devMode: t.devMode ?? t.dev_mode ?? state.fsm.devMode,
     };
 
     return {
@@ -167,6 +177,10 @@ export const useStore = create<BioArcStore>((set, get) => ({
         else if (action === 'air_off') set({ fsm: { ...currentFsm, airCompressor: false } });
         else if (action === 'agitator_on') set({ fsm: { ...currentFsm, agitator: true } });
         else if (action === 'agitator_off') set({ fsm: { ...currentFsm, agitator: false } });
+        else if (action === 'dev_mode_on') set({ fsmCurrentState: 'DEV', fsm: { ...currentFsm, mode: 'MANUAL', devMode: true } });
+        else if (action === 'dev_mode_off') set({ fsmCurrentState: 'IDLE', fsm: { ...currentFsm, mode: 'AUTONOMOUS', devMode: false } });
+        else if (action === 'fan_on') set({ fsm: { ...currentFsm, exhaustFan: true } });
+        else if (action === 'fan_off') set({ fsm: { ...currentFsm, exhaustFan: false } });
 
         return true;
       } else {
@@ -179,6 +193,24 @@ export const useStore = create<BioArcStore>((set, get) => ({
       get().addMaintenanceLog(`Network error sending command: ${action}`, 'critical');
       return false;
     }
+  },
+
+  toggleDevMode: async () => {
+    const isDev = get().fsm.devMode;
+    return get().sendActionCommand(isDev ? 'dev_mode_off' : 'dev_mode_on');
+  },
+  toggleExhaustFan: async () => {
+    const isFan = get().fsm.exhaustFan;
+    return get().sendActionCommand(isFan ? 'fan_off' : 'fan_on');
+  },
+  setDistEmpty: async () => {
+    return get().sendActionCommand('set_dist_empty');
+  },
+  setDistFull: async () => {
+    return get().sendActionCommand('set_dist_full');
+  },
+  pulseIntake: async () => {
+    return get().sendActionCommand('pulse_intake');
   },
 
   sendConfigCommand: async (config: any) => {
