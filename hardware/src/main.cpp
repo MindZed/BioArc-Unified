@@ -47,6 +47,9 @@
 #define RELAY_AGITATOR 27   // Active-LOW (Agitator Motor)
 #define RELAY_FAN 23        // Active-LOW (12V Chamber Exhaust Fan)
 
+#define BTN_NAV 13          // Button 1: Next Page / Carousel (INPUT_PULLUP)
+#define BTN_ACTION 14       // Button 2: Select / Action / Dev Toggle (INPUT_PULLUP)
+
 const int DIST_REFILL_TRIG = 4;
 
 // ==========================================
@@ -230,7 +233,7 @@ CaptivePortal portal;
 
 // FSM Internal State Variables (Controlled by Task_FSM_Control)
 FSM_State currentState = STATE_AWAITING_COMMISSION;
-bool devMode = false;
+bool devMode = true; // Default to Development Mode on boot for bench testing
 unsigned long actionStartTime = 0;
 unsigned long pumpOvershootTimer = 0;
 bool overshootActive = false;
@@ -1100,11 +1103,11 @@ void Task_Captive_Portal(void* pvParameters) {
 }
 
 // ----------------------------------------------------------------------
-// TASK 6: DUAL LCD 1602 DISPLAYS (CORE 0 - PRIORITY 1)
+// TASK 6: OLED DISPLAY CAROUSEL (CORE 0 - PRIORITY 1)
 // ----------------------------------------------------------------------
 void Task_Dual_Display(void* pvParameters) {
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(200));
 
         TelemetrySnapshot snap;
         if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -1113,12 +1116,96 @@ void Task_Dual_Display(void* pvParameters) {
         }
 
         if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            displays.setSystemData(stateNames[snap.state], snap.ipStr, snap.wifiConnected, snap.mqttConnected);
+            displays.setSystemData(stateNames[snap.state], snap.ipStr, snap.wifiConnected, snap.mqttConnected, WiFi.RSSI(), ESP.getFreeHeap());
             displays.setTelemetryData(snap.waterTemp, snap.airTemp, snap.humidity, snap.distanceCM, snap.timeStr);
             displays.setDevData(snap.devMode, snap.rawDistanceCM, snap.fanOn);
             displays.setActuatorStates(snap.lightOn, snap.airOn, snap.intakeOn, snap.outtakeOn, snap.agitatorOn, snap.fanOn);
+            displays.setCalibrationData(config.distEmpty, config.distFull);
             displays.update();
             xSemaphoreGive(xI2CMutex);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------
+// TASK 7: PHYSICAL BUTTON NAVIGATION & ACTIONS (CORE 0 - PRIORITY 2)
+// ----------------------------------------------------------------------
+void Task_Button_Input(void* pvParameters) {
+    uint32_t btn1DownTime = 0;
+    bool btn1Pressed = false;
+    bool btn1LongReported = false;
+
+    uint32_t btn2DownTime = 0;
+    bool btn2Pressed = false;
+    bool btn2LongReported = false;
+
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(20)); // 20ms debounce polling
+
+        uint32_t now = millis();
+
+        // ---------------- Button 1 (GPIO 13 - NAV) ----------------
+        bool btn1State = (digitalRead(BTN_NAV) == LOW); // Active-LOW
+        if (btn1State && !btn1Pressed) {
+            btn1Pressed = true;
+            btn1DownTime = now;
+            btn1LongReported = false;
+        } else if (btn1State && btn1Pressed) {
+            // Check for Long Press (> 1500ms)
+            if (!btn1LongReported && (now - btn1DownTime >= 1500)) {
+                btn1LongReported = true;
+                displays.toggleAutoCycle();
+                Serial.println("[BUTTON] BTN1 Long Press -> Toggle Auto-Cycle");
+            }
+        } else if (!btn1State && btn1Pressed) {
+            // Button Released
+            uint32_t duration = now - btn1DownTime;
+            btn1Pressed = false;
+            if (!btn1LongReported && duration >= 40) {
+                // Short Press -> Cycle to Next Page
+                displays.nextPage();
+                Serial.printf("[BUTTON] BTN1 Short Press (%u ms) -> Page %d\n", duration, displays.getCurrentPage());
+            }
+        }
+
+        // ---------------- Button 2 (GPIO 14 - ACTION) ----------------
+        bool btn2State = (digitalRead(BTN_ACTION) == LOW); // Active-LOW
+        if (btn2State && !btn2Pressed) {
+            btn2Pressed = true;
+            btn2DownTime = now;
+            btn2LongReported = false;
+        } else if (btn2State && btn2Pressed) {
+            // Check for Long Press (> 2000ms) -> Toggle Dev Mode!
+            if (!btn2LongReported && (now - btn2DownTime >= 2000)) {
+                btn2LongReported = true;
+                bool isDev = sharedTelemetry.devMode;
+                dispatchCommand(isDev ? "dev_mode_off" : "dev_mode_on");
+                displays.showToast(isDev ? "DEV MODE: OFF" : "DEV MODE: ON", 2000);
+                Serial.println("[BUTTON] BTN2 Long Press -> Toggled DEV_MODE");
+            }
+        } else if (!btn2State && btn2Pressed) {
+            // Button Released
+            uint32_t duration = now - btn2DownTime;
+            btn2Pressed = false;
+            if (!btn2LongReported && duration >= 40) {
+                // Contextual action on Short Press
+                if (currentState == STATE_AWAITING_COMMISSION) {
+                    dispatchCommand("fill");
+                    displays.showToast("STARTING FILL", 2000);
+                    Serial.println("[BUTTON] BTN2 Action -> Triggered Commission Fill");
+                } else if (currentState == STATE_HAZARD) {
+                    dispatchCommand("clear_hazard");
+                    displays.showToast("HAZARD CLEARED", 2000);
+                    Serial.println("[BUTTON] BTN2 Action -> Cleared Hazard");
+                } else if (sharedTelemetry.devMode) {
+                    dispatchCommand("pulse_intake");
+                    displays.showToast("JOG INTAKE 5s", 2000);
+                    Serial.println("[BUTTON] BTN2 Action -> 5s Intake Jog");
+                } else {
+                    displays.nextPage();
+                    Serial.println("[BUTTON] BTN2 Short Press -> Next Page");
+                }
+            }
         }
     }
 }
@@ -1162,6 +1249,13 @@ void setup() {
     waterTemp.begin();
     waterLevel.begin();
     relays.begin();
+
+    // 4b. Initialize Physical Navigation Buttons (GPIO 13 & 14) & Dev Mode
+    pinMode(BTN_NAV, INPUT_PULLUP);
+    pinMode(BTN_ACTION, INPUT_PULLUP);
+    sharedTelemetry.devMode = true;
+    Serial.println("[SYSTEM] Physical Buttons on GPIO 13 & 14 configured with INPUT_PULLUP.");
+    Serial.println("[SYSTEM] Booting directly into DEVELOPMENT MODE (DEV_MODE) for safe bench testing.");
 
     // 5. Ultrasonic Settling & Boot FSM State Authority Decision
     Serial.println("[SYSTEM] Sampling ultrasonic level sensor for boot authority...");
@@ -1245,10 +1339,11 @@ void setup() {
     xTaskCreatePinnedToCore(Task_Sensors,            "Task_Sensors",  3072, NULL, 3, NULL, 1);
     xTaskCreatePinnedToCore(Task_Optical_Sampling,  "Task_Optical",  3072, NULL, 2, NULL, 1);
 
-    // Core 0 Tasks (Networking, Web Portal & Dual Displays)
+    // Core 0 Tasks (Networking, Web Portal, Displays & Buttons)
     xTaskCreatePinnedToCore(Task_Network_Telemetry, "Task_Network",  8192, NULL, 2, NULL, 0); // 8KB for mbedTLS stack
     xTaskCreatePinnedToCore(Task_Captive_Portal,     "Task_Portal",   4096, NULL, 1, NULL, 0);
     xTaskCreatePinnedToCore(Task_Dual_Display,       "Task_Display",  3072, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(Task_Button_Input,       "Task_Buttons",  2048, NULL, 2, NULL, 0);
 
     systemReadyTime = millis();
     Serial.println("[SUCCESS] BioArc FreeRTOS Kernel Active.\n");
