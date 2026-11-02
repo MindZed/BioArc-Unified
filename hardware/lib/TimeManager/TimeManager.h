@@ -23,9 +23,13 @@ public:
     uint8_t getMinute();
     
     String getFormattedTime();
+    bool hasRTC() const { return _hasRtc; }
 
 private:
     RTC_DS3231 _rtc;
+    bool _hasRtc;
+    DateTime _cachedTime;
+    unsigned long _lastRtcRead;
     bool _ntpConfigured;
     bool _rtcSyncedWithNTP;
     unsigned long _lastPrint;

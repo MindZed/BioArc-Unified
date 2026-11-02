@@ -4,7 +4,10 @@
 #include <TelnetStream.h>
 
 TimeManager::TimeManager()
+    : _cachedTime(DateTime(2026, 1, 1, 0, 0, 0))
 {
+    _hasRtc = false;
+    _lastRtcRead = 0;
     _lastPrint = 0;
     _lastNTPCheck = 0;
     _ntpConfigured = false;
@@ -13,16 +16,21 @@ TimeManager::TimeManager()
 
 bool TimeManager::begin()
 {
-    if (!_rtc.begin())
+    _hasRtc = _rtc.begin();
+    if (!_hasRtc)
     {
+        Serial.println("[WARNING] DS3231 RTC Module not detected on I2C (0x68). Using ESP32 internal clock.");
+        TelnetStream.println("[WARNING] DS3231 RTC Module not detected on I2C (0x68). Using ESP32 internal clock.");
         return false;
     }
-    // If the RTC lost power, set it to compile time just as a fallback
+
     if (_rtc.lostPower()) {
         _rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     }
-    Serial.println("[SYSTEM] RTC Module Initialized.");
-    TelnetStream.println("[SYSTEM] RTC Module Initialized.");
+    _cachedTime = _rtc.now();
+    _lastRtcRead = millis();
+    Serial.println("[SYSTEM] DS3231 RTC Module Initialized.");
+    TelnetStream.println("[SYSTEM] DS3231 RTC Module Initialized.");
     return true;
 }
 
@@ -37,17 +45,39 @@ void TimeManager::setupNTP(const char* ntpServer, long gmtOffset_sec, int daylig
 
 void TimeManager::update()
 {
-    // Try to sync RTC with NTP if configured but not yet synced
-    if (_ntpConfigured && !_rtcSyncedWithNTP && (millis() - _lastNTPCheck > 5000)) {
-        _lastNTPCheck = millis();
+    unsigned long currentMillis = millis();
+
+    // 1. Try to sync RTC with NTP if configured but not yet synced
+    if (_ntpConfigured && !_rtcSyncedWithNTP && (currentMillis - _lastNTPCheck > 5000)) {
+        _lastNTPCheck = currentMillis;
         struct tm timeinfo;
-        if (getLocalTime(&timeinfo, 10)) { // 10ms timeout so we don't block
-            // NTP sync successful! Adjust RTC.
-            _rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, 
-                                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+        if (getLocalTime(&timeinfo, 10)) {
+            if (_hasRtc) {
+                _rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, 
+                                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+            }
+            _cachedTime = DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, 
+                                   timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
             _rtcSyncedWithNTP = true;
+            _lastRtcRead = currentMillis;
             Serial.println("[SUCCESS] RTC synchronized with NTP Server!");
             TelnetStream.println("[SUCCESS] RTC synchronized with NTP Server!");
+            return;
+        }
+    }
+
+    // 2. Read from internal RTC or DS3231 at most once every 1000ms (zero I2C bus flooding)
+    if (currentMillis - _lastRtcRead >= 1000) {
+        _lastRtcRead = currentMillis;
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo, 5)) {
+            _cachedTime = DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, 
+                                   timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        } else if (_hasRtc) {
+            _cachedTime = _rtc.now();
+        } else {
+            // Advance cached time by elapsed seconds
+            _cachedTime = DateTime(_cachedTime.unixtime() + 1);
         }
     }
 }
@@ -58,11 +88,10 @@ void TimeManager::printTime()
     if (currentMillis - _lastPrint >= 1000)
     {
         _lastPrint = currentMillis;
-        DateTime now = _rtc.now();
-        
         char buffer[32];
         snprintf(buffer, sizeof(buffer), "RTC Time: %04d/%02d/%02d %02d:%02d:%02d", 
-                 now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
+                 _cachedTime.year(), _cachedTime.month(), _cachedTime.day(), 
+                 _cachedTime.hour(), _cachedTime.minute(), _cachedTime.second());
         
         Serial.println(buffer);
         TelnetStream.println(buffer);
@@ -71,18 +100,17 @@ void TimeManager::printTime()
 
 uint8_t TimeManager::getHour()
 {
-    return _rtc.now().hour();
+    return _cachedTime.hour();
 }
 
 uint8_t TimeManager::getMinute()
 {
-    return _rtc.now().minute();
+    return _cachedTime.minute();
 }
 
 String TimeManager::getFormattedTime()
 {
-    DateTime now = _rtc.now();
     char buffer[10];
-    snprintf(buffer, sizeof(buffer), "%02d:%02d", now.hour(), now.minute());
+    snprintf(buffer, sizeof(buffer), "%02d:%02d", _cachedTime.hour(), _cachedTime.minute());
     return String(buffer);
 }

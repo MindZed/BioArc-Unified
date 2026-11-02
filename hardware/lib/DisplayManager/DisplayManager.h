@@ -53,6 +53,7 @@ public:
     void toggleAutoCycle();
     bool isAutoCycle() const { return _autoCycle; }
     void showToast(const char* msg, uint16_t durationMs = 1500);
+    bool isOledConnected() const { return _oledDetected; }
 
     // Renders the 128x64 display
     void update();
@@ -107,6 +108,8 @@ private:
     // Animation frames
     uint8_t _wavePhase;
     uint8_t _bubblePhase;
+    bool _oledDetected;
+    unsigned long _lastProbeTime;
 
     // Screen Renderers
     void drawHeader(const char* title = nullptr);

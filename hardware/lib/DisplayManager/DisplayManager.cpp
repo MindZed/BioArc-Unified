@@ -41,24 +41,44 @@ DisplayManager::DisplayManager(uint8_t oled_addr, uint8_t unused)
 
     _wavePhase = 0;
     _bubblePhase = 0;
+    _oledDetected = false;
+    _lastProbeTime = 0;
 }
 
 void DisplayManager::begin() {
     _u8g2.setI2CAddress(_i2cAddress * 2);
-    _u8g2.begin();
-    
-    // Sleek High-Precision Boot Splash
-    _u8g2.clearBuffer();
-    _u8g2.drawRFrame(4, 4, 120, 56, 3);
-    _u8g2.setFont(u8g2_font_helvB08_tf);
-    _u8g2.drawStr(22, 22, "BIOARC KERNEL");
-    _u8g2.drawHLine(22, 26, 84);
-    _u8g2.setFont(u8g2_font_5x7_tf);
-    _u8g2.drawStr(22, 38, "Dual-Core FreeRTOS");
-    _u8g2.drawStr(22, 49, "Tactile OLED Online");
-    _u8g2.sendBuffer();
+    _u8g2.setBusClock(400000);
 
-    Serial.printf("[SYSTEM] 1.3\" SH1106 OLED Display Initialized (Addr: 0x%02X).\n", _i2cAddress);
+    Wire.beginTransmission(_i2cAddress);
+    byte err = Wire.endTransmission();
+    if (err != 0) {
+        // Probe alternate address 0x3D
+        Wire.beginTransmission(0x3D);
+        if (Wire.endTransmission() == 0) {
+            _i2cAddress = 0x3D;
+            _u8g2.setI2CAddress(0x3D * 2);
+            err = 0;
+            Serial.println("[SYSTEM] OLED detected on alternate address 0x3D.");
+        }
+    }
+
+    if (err == 0) {
+        _oledDetected = true;
+        _u8g2.begin();
+        _u8g2.clearBuffer();
+        _u8g2.drawRFrame(4, 4, 120, 56, 3);
+        _u8g2.setFont(u8g2_font_helvB08_tf);
+        _u8g2.drawStr(22, 22, "BIOARC KERNEL");
+        _u8g2.drawHLine(22, 26, 84);
+        _u8g2.setFont(u8g2_font_5x7_tf);
+        _u8g2.drawStr(22, 38, "Dual-Core FreeRTOS");
+        _u8g2.drawStr(22, 49, "Tactile OLED Online");
+        _u8g2.sendBuffer();
+        Serial.printf("[SYSTEM] 1.3\" SH1106 OLED Initialized (Addr: 0x%02X, Clock: 400kHz).\n", _i2cAddress);
+    } else {
+        _oledDetected = false;
+        Serial.printf("[WARNING] OLED Display not responding on I2C (0x%02X). Auto-recovery watchdog armed.\n", _i2cAddress);
+    }
 }
 
 void DisplayManager::setSystemData(const char* state, String ip, bool wifiOk, bool mqttOk, int wifiRssi, uint32_t freeHeap) {
@@ -474,6 +494,41 @@ void DisplayManager::drawToastOverlay() {
 
 void DisplayManager::update() {
     unsigned long currentMillis = millis();
+
+    // Hot-Plug Auto-Recovery Watchdog:
+    // Probe every 2.5s if offline, or every 12s if already online
+    unsigned long probeInterval = _oledDetected ? 12000 : 2500;
+    if (currentMillis - _lastProbeTime >= probeInterval) {
+        _lastProbeTime = currentMillis;
+        Wire.beginTransmission(_i2cAddress);
+        bool ack = (Wire.endTransmission() == 0);
+        if (!ack) {
+            Wire.beginTransmission(0x3D);
+            if (Wire.endTransmission() == 0) {
+                _i2cAddress = 0x3D;
+                _u8g2.setI2CAddress(0x3D * 2);
+                ack = true;
+            }
+        }
+
+        if (ack) {
+            if (!_oledDetected) {
+                _oledDetected = true;
+                _u8g2.begin();
+                showToast("OLED RECOVERED", 1500);
+                Serial.printf("[SYSTEM] OLED Reconnected on 0x%02X! Display restored.\n", _i2cAddress);
+            }
+        } else {
+            if (_oledDetected) {
+                _oledDetected = false;
+                Serial.println("[WARNING] OLED disconnected. Auto-recovery active.");
+            }
+        }
+    }
+
+    if (!_oledDetected) {
+        return; // Skip rendering when display hardware is disconnected
+    }
 
     // Fluid animations
     _wavePhase = (_wavePhase + 1) % 4;

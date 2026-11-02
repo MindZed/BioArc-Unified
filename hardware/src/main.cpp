@@ -878,6 +878,7 @@ void Task_FSM_Control(void* pvParameters) {
 void Task_Sensors(void* pvParameters) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     unsigned long lastBME = 0;
+    unsigned long lastTimeUpdate = 0;
 
     for (;;) {
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(50));
@@ -897,8 +898,14 @@ void Task_Sensors(void* pvParameters) {
             }
         }
 
-        // 4. Update Time & Calendar
-        timeManager.update();
+        // 4. Update Time & Calendar (rate-limited to 1Hz under I2C mutex)
+        if (millis() - lastTimeUpdate >= 1000) {
+            lastTimeUpdate = millis();
+            if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                timeManager.update();
+                xSemaphoreGive(xI2CMutex);
+            }
+        }
 
         // 5. Publish to shared state
         if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -1328,8 +1335,11 @@ void setup() {
     loadConfig();
     loadNetworkConfig();
 
-    // 3. Initialize I2C Bus & Displays
+    // 3. Initialize I2C Bus & Displays (400kHz Fast-Mode with POR Settling Delay)
+    delay(120); // 120ms power-on settling delay for OLED charge pump & reset circuit
     Wire.begin(I2C_SDA, I2C_SCL);
+    Wire.setClock(400000); // 400kHz Fast I2C (4x faster frame rendering)
+    Wire.setTimeOut(30);   // 30ms hardware bus timeout
     if (xSemaphoreTake(xI2CMutex, portMAX_DELAY) == pdTRUE) {
         displays.begin();
         timeManager.begin();
