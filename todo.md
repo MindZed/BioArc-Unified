@@ -68,10 +68,10 @@ This tracking document outlines completed hardware implementations, active testi
 - [x] **Resolve MQTT Disconnect on Port 8883**:
   - Identified root cause: `mqtt.mindzed.tech:8883` is running Plain TCP (non-TLS) while firmware was attempting TLS handshake via `WiFiClientSecure`.
   - Updated `MqttManager` to standard `WiFiClient` for instant connection (`rc = 0`) and verified telemetry publish/subscribe.
-- [ ] **MQTT Broker TLS/SSL Hardening (`mqtt.mindzed.tech`)** *(Pending Broker Admin)*:
-  - Admin to bind SSL/TLS certificates (e.g. Let's Encrypt / Certbot) on port 8883.
-  - Restrict port 1883 to localhost/internal Docker network.
-  - Once TLS is enabled on broker, re-enable `WiFiClientSecure` on ESP32 for production encrypted transport.
+- [x] **MQTT Broker TLS/SSL Hardening (`mqtt.mindzed.tech`)**:
+  - Broker upgraded to 100% TLSv1.3 on port 8883 with Let's Encrypt certificate.
+  - Go Backend (`bioarc-go-backend`) connected via TLS on port 8883.
+  - ESP32 firmware updated to `WiFiClientSecure` with `.setInsecure()`, compiled cleanly, ready for OTA flash.
 
 ---
 

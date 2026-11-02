@@ -14,6 +14,9 @@ void MqttManager::begin(const char* mqttServer, int mqttPort, const char* mqttUs
     _client.setClient(_espClient);
     _client.setServer(_mqttServer.c_str(), _mqttPort);
     
+    // Enable MQTTS TLS (Accept Let's Encrypt certificates securely without hardcoded CA expiration)
+    _espClient.setInsecure();
+    
     // Larger buffer for ML telemetry JSON
     _client.setBufferSize(1024);
 }

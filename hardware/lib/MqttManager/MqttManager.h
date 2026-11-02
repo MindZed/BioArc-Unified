@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
@@ -31,7 +31,7 @@ public:
     void publishLog(const char* level, const char* msg);
 
 private:
-    WiFiClient _espClient;
+    WiFiClientSecure _espClient;
     PubSubClient _client;
     String _mqttServer;
     int _mqttPort;
