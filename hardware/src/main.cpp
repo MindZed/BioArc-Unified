@@ -41,10 +41,10 @@
 #define ECHO_PIN 19
 
 #define RELAY_INTAKE 33     // Active-LOW (Intake Solenoid / Pump)
-#define RELAY_LIGHT 32      // Active-HIGH (Grow Lights replacement module)
-#define SSR1_AIR_PUMP 25    // Active-LOW (Aeration Sparger)
-#define RELAY_OUTTAKE 26    // Active-LOW (Harvest Drain)
-#define RELAY_AGITATOR 27   // Active-LOW (Agitator Motor)
+#define RELAY_LIGHT 27      // Active-LOW (Grow Lights array on multi-channel relay)
+#define SSR1_AIR_PUMP 25    // Active-LOW (Aeration Sparger SSR)
+#define RELAY_OUTTAKE 32    // Active-HIGH (Harvest Drain Pump on single-channel relay)
+#define RELAY_AGITATOR 26   // Active-LOW (Agitator Motor on multi-channel relay)
 #define RELAY_FAN 23        // Active-LOW (12V Chamber Exhaust Fan)
 
 #define BTN_NAV 13          // Button 1: Next Page / Carousel (INPUT_PULLUP)
@@ -239,6 +239,8 @@ unsigned long pumpOvershootTimer = 0;
 bool overshootActive = false;
 unsigned long pulseIntakeTimer = 0;
 bool pulseIntakeActive = false;
+unsigned long pulseOuttakeTimer = 0;
+bool pulseOuttakeActive = false;
 int targetDistance = 0;
 int lastAgitationHour = -1;
 int lastAgitationMin = -1;
@@ -315,24 +317,44 @@ void runPreFlightDiagnostics() {
 
     // 1. I2C Bus Scan
     Serial.println("[DIAG] Scanning I2C Bus (SDA: GPIO 21, SCL: GPIO 22)...");
+    TelnetStream.println("[DIAG] Scanning I2C Bus (SDA: GPIO 21, SCL: GPIO 22)...");
     uint8_t count = 0;
     if (xSemaphoreTake(xI2CMutex, portMAX_DELAY) == pdTRUE) {
         for (uint8_t addr = 1; addr < 127; addr++) {
             Wire.beginTransmission(addr);
-            if (Wire.endTransmission() == 0) {
+            byte err = Wire.endTransmission();
+            if (err == 0) {
                 Serial.printf("  -> I2C Device Found at 0x%02X: ", addr);
-                if (addr == 0x27) Serial.println("Status LCD 1602 [OK]");
-                else if (addr == 0x25) Serial.println("Telemetry LCD 1602 [OK]");
-                else if (addr == 0x29) Serial.println("Adafruit TCS34725 Color Sensor [OK]");
-                else if (addr == 0x76 || addr == 0x77) Serial.println("Adafruit BME280 Environment Sensor [OK]");
-                else if (addr == 0x68) Serial.println("DS3231 Real-Time Clock [OK]");
-                else Serial.println("Unknown Peripheral");
+                TelnetStream.printf("  -> I2C Device Found at 0x%02X: ", addr);
+                if (addr == 0x3C || addr == 0x3D) {
+                    Serial.println("1.3\" OLED Display (SH1106) [FOUND]");
+                    TelnetStream.println("1.3\" OLED Display (SH1106) [FOUND]");
+                } else if (addr == 0x27) {
+                    Serial.println("Status LCD 1602 [OK]");
+                    TelnetStream.println("Status LCD 1602 [OK]");
+                } else if (addr == 0x25) {
+                    Serial.println("Telemetry LCD 1602 [OK]");
+                    TelnetStream.println("Telemetry LCD 1602 [OK]");
+                } else if (addr == 0x29) {
+                    Serial.println("Adafruit TCS34725 Color Sensor [OK]");
+                    TelnetStream.println("Adafruit TCS34725 Color Sensor [OK]");
+                } else if (addr == 0x76 || addr == 0x77) {
+                    Serial.println("Adafruit BME280 Environment Sensor [OK]");
+                    TelnetStream.println("Adafruit BME280 Environment Sensor [OK]");
+                } else if (addr == 0x68) {
+                    Serial.println("DS3231 Real-Time Clock [OK]");
+                    TelnetStream.println("DS3231 Real-Time Clock [OK]");
+                } else {
+                    Serial.printf("Unknown Peripheral (0x%02X)\n", addr);
+                    TelnetStream.printf("Unknown Peripheral (0x%02X)\n", addr);
+                }
                 count++;
             }
         }
         xSemaphoreGive(xI2CMutex);
     }
     Serial.printf("[DIAG] I2C Scan Complete: %d active devices identified.\n", count);
+    TelnetStream.printf("[DIAG] I2C Scan Complete: %d active devices identified.\n", count);
 
     // 2. DS18B20 OneWire Bus Test
     waterTemp.update();
@@ -528,6 +550,18 @@ void Task_FSM_Control(void* pvParameters) {
                 pulseIntakeActive = true;
                 mqtt.publishLog("info", "Pulsing Intake Pump (5s jog)...");
             }
+            else if (action == "pulse_outtake") {
+                relays.setOuttake(true);
+                pulseOuttakeTimer = millis();
+                pulseOuttakeActive = true;
+                mqtt.publishLog("info", "Pulsing Outtake Pump (5s jog)...");
+            }
+            else if (action == "stop_all" || action == "kill_all") {
+                relays.stopAll();
+                pulseIntakeActive = false;
+                pulseOuttakeActive = false;
+                mqtt.publishLog("info", "All Relays Stopped via Hardware Control.");
+            }
             else if (action == "set_dist_empty") {
                 int curD = 0;
                 if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -649,11 +683,16 @@ void Task_FSM_Control(void* pvParameters) {
             }
         }
 
-        // 4c. Timed Intake Pulse Jog Evaluation
+        // 4c. Timed Intake & Outtake Pulse Jog Evaluation
         if (pulseIntakeActive && (millis() - pulseIntakeTimer >= 5000)) {
             relays.setIntake(false);
             pulseIntakeActive = false;
             mqtt.publishLog("info", "Intake pulse jog complete (5s).");
+        }
+        if (pulseOuttakeActive && (millis() - pulseOuttakeTimer >= 5000)) {
+            relays.setOuttake(false);
+            pulseOuttakeActive = false;
+            mqtt.publishLog("info", "Outtake pulse jog complete (5s).");
         }
 
         // 5. Finite State Machine Transitions
@@ -1107,7 +1146,7 @@ void Task_Captive_Portal(void* pvParameters) {
 // ----------------------------------------------------------------------
 void Task_Dual_Display(void* pvParameters) {
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(100)); // 10Hz smooth refresh
 
         TelemetrySnapshot snap;
         if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -1121,6 +1160,11 @@ void Task_Dual_Display(void* pvParameters) {
             displays.setDevData(snap.devMode, snap.rawDistanceCM, snap.fanOn);
             displays.setActuatorStates(snap.lightOn, snap.airOn, snap.intakeOn, snap.outtakeOn, snap.agitatorOn, snap.fanOn);
             displays.setCalibrationData(config.distEmpty, config.distFull);
+            
+            uint8_t inJogSec = pulseIntakeActive ? (5 - constrain((millis() - pulseIntakeTimer) / 1000, 0, 5)) : 0;
+            uint8_t outJogSec = pulseOuttakeActive ? (5 - constrain((millis() - pulseOuttakeTimer) / 1000, 0, 5)) : 0;
+            displays.setJogData(inJogSec, outJogSec);
+            
             displays.update();
             xSemaphoreGive(xI2CMutex);
         }
@@ -1144,7 +1188,7 @@ void Task_Button_Input(void* pvParameters) {
 
         uint32_t now = millis();
 
-        // ---------------- Button 1 (GPIO 13 - NAV) ----------------
+        // ---------------- Button 1 (GPIO 13 - NAV / SELECT) ----------------
         bool btn1State = (digitalRead(BTN_NAV) == LOW); // Active-LOW
         if (btn1State && !btn1Pressed) {
             btn1Pressed = true;
@@ -1154,21 +1198,33 @@ void Task_Button_Input(void* pvParameters) {
             // Check for Long Press (> 1500ms)
             if (!btn1LongReported && (now - btn1DownTime >= 1500)) {
                 btn1LongReported = true;
-                displays.toggleAutoCycle();
-                Serial.println("[BUTTON] BTN1 Long Press -> Toggle Auto-Cycle");
+                if (devMode && displays.getCurrentPage() == PAGE_GEOMETRY) {
+                    dispatchCommand("set_dist_empty");
+                    displays.showToast("SAVED EMPTY 0%", 2000);
+                    Serial.println("[BUTTON] BTN1 Long Press -> Set Empty Distance");
+                } else if (devMode && displays.getCurrentPage() == PAGE_ACTUATORS) {
+                    displays.nextPage();
+                } else {
+                    displays.toggleAutoCycle();
+                    Serial.println("[BUTTON] BTN1 Long Press -> Toggle Auto-Cycle");
+                }
             }
         } else if (!btn1State && btn1Pressed) {
-            // Button Released
+            // Button 1 Released
             uint32_t duration = now - btn1DownTime;
             btn1Pressed = false;
             if (!btn1LongReported && duration >= 40) {
-                // Short Press -> Cycle to Next Page
-                displays.nextPage();
-                Serial.printf("[BUTTON] BTN1 Short Press (%u ms) -> Page %d\n", duration, displays.getCurrentPage());
+                if (devMode && displays.getCurrentPage() == PAGE_ACTUATORS) {
+                    displays.stepActuatorSelection();
+                    Serial.printf("[BUTTON] BTN1 Step Actuator -> Focus %d\n", displays.getSelectedActuator());
+                } else {
+                    displays.prevPage();
+                    Serial.printf("[BUTTON] BTN1 Short Press -> Prev Page %d\n", displays.getCurrentPage());
+                }
             }
         }
 
-        // ---------------- Button 2 (GPIO 14 - ACTION) ----------------
+        // ---------------- Button 2 (GPIO 14 - ACTION / TOGGLE / NEXT) ----------------
         bool btn2State = (digitalRead(BTN_ACTION) == LOW); // Active-LOW
         if (btn2State && !btn2Pressed) {
             btn2Pressed = true;
@@ -1178,32 +1234,73 @@ void Task_Button_Input(void* pvParameters) {
             // Check for Long Press (> 2000ms) -> Toggle Dev Mode!
             if (!btn2LongReported && (now - btn2DownTime >= 2000)) {
                 btn2LongReported = true;
-                bool isDev = sharedTelemetry.devMode;
-                dispatchCommand(isDev ? "dev_mode_off" : "dev_mode_on");
-                displays.showToast(isDev ? "DEV MODE: OFF" : "DEV MODE: ON", 2000);
-                Serial.println("[BUTTON] BTN2 Long Press -> Toggled DEV_MODE");
+                if (devMode && displays.getCurrentPage() == PAGE_GEOMETRY) {
+                    dispatchCommand("set_dist_full");
+                    displays.showToast("SAVED FULL 100%", 2000);
+                    Serial.println("[BUTTON] BTN2 Long Press -> Set Full Distance");
+                } else {
+                    bool isDev = sharedTelemetry.devMode;
+                    dispatchCommand(isDev ? "dev_mode_off" : "dev_mode_on");
+                    displays.showToast(isDev ? "DEV MODE: OFF" : "DEV MODE: ON", 2000);
+                    Serial.println("[BUTTON] BTN2 Long Press -> Toggled DEV_MODE");
+                }
             }
         } else if (!btn2State && btn2Pressed) {
-            // Button Released
+            // Button 2 Released
             uint32_t duration = now - btn2DownTime;
             btn2Pressed = false;
             if (!btn2LongReported && duration >= 40) {
-                // Contextual action on Short Press
-                if (currentState == STATE_AWAITING_COMMISSION) {
-                    dispatchCommand("fill");
-                    displays.showToast("STARTING FILL", 2000);
-                    Serial.println("[BUTTON] BTN2 Action -> Triggered Commission Fill");
-                } else if (currentState == STATE_HAZARD) {
+                if (currentState == STATE_HAZARD) {
                     dispatchCommand("clear_hazard");
                     displays.showToast("HAZARD CLEARED", 2000);
                     Serial.println("[BUTTON] BTN2 Action -> Cleared Hazard");
-                } else if (sharedTelemetry.devMode) {
-                    dispatchCommand("pulse_intake");
-                    displays.showToast("JOG INTAKE 5s", 2000);
-                    Serial.println("[BUTTON] BTN2 Action -> 5s Intake Jog");
+                } else if (currentState == STATE_AWAITING_COMMISSION) {
+                    dispatchCommand("fill");
+                    displays.showToast("STARTING FILL", 2000);
+                    Serial.println("[BUTTON] BTN2 Action -> Triggered Commission Fill");
+                } else if (devMode && displays.getCurrentPage() == PAGE_ACTUATORS) {
+                    uint8_t focus = displays.getSelectedActuator();
+                    switch (focus) {
+                        case FOCUS_LIGHT: {
+                            bool nextSt = !sharedTelemetry.lightOn;
+                            dispatchCommand(nextSt ? "light_on" : "light_off");
+                            displays.showToast(nextSt ? "LIGHT: ON" : "LIGHT: OFF", 1200);
+                            break;
+                        }
+                        case FOCUS_AIR: {
+                            bool nextSt = !sharedTelemetry.airOn;
+                            dispatchCommand(nextSt ? "air_on" : "air_off");
+                            displays.showToast(nextSt ? "AIR: ON" : "AIR: OFF", 1200);
+                            break;
+                        }
+                        case FOCUS_INLET:
+                            dispatchCommand("pulse_intake");
+                            displays.showToast("INLET JOG 5s", 2000);
+                            break;
+                        case FOCUS_OUTLET:
+                            dispatchCommand("pulse_outtake");
+                            displays.showToast("OUTLET JOG 5s", 2000);
+                            break;
+                        case FOCUS_AGITATOR: {
+                            bool nextSt = !sharedTelemetry.agitatorOn;
+                            dispatchCommand(nextSt ? "agitator_on" : "agitator_off");
+                            displays.showToast(nextSt ? "AGIT: ON" : "AGIT: OFF", 1200);
+                            break;
+                        }
+                        case FOCUS_FAN: {
+                            bool nextSt = !sharedTelemetry.fanOn;
+                            dispatchCommand(nextSt ? "fan_on" : "fan_off");
+                            displays.showToast(nextSt ? "FAN: ON" : "FAN: OFF", 1200);
+                            break;
+                        }
+                        case FOCUS_KILL_ALL:
+                            dispatchCommand("stop_all");
+                            displays.showToast("ALL RELAYS OFF", 2000);
+                            break;
+                    }
                 } else {
                     displays.nextPage();
-                    Serial.println("[BUTTON] BTN2 Short Press -> Next Page");
+                    Serial.printf("[BUTTON] BTN2 Short Press -> Next Page %d\n", displays.getCurrentPage());
                 }
             }
         }

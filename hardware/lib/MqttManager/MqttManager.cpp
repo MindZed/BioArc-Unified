@@ -11,8 +11,7 @@ void MqttManager::begin(const char* mqttServer, int mqttPort, const char* mqttUs
     _mqttUser = (mqttUser != nullptr) ? mqttUser : "";
     _mqttPass = (mqttPass != nullptr) ? mqttPass : "";
     
-    // Enable TLS for MQTTS (Port 8883)
-    _espClient.setInsecure(); // Handles encrypted TLS handshake
+    _client.setClient(_espClient);
     _client.setServer(_mqttServer.c_str(), _mqttPort);
     
     // Larger buffer for ML telemetry JSON
@@ -59,8 +58,8 @@ void MqttManager::update() {
                     _client.subscribe(TOPIC_COMMAND);
                     _client.subscribe(TOPIC_CONFIG);
                 } else {
-                    Serial.print("[WARNING] MQTT Connect Failed, rc=");
-                    Serial.println(_client.state());
+                    Serial.printf("[WARNING] MQTT Connect Failed, rc=%d\n", _client.state());
+                    TelnetStream.printf("[WARNING] MQTT Connect Failed, rc=%d\n", _client.state());
                 }
             }
         } else {

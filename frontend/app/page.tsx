@@ -19,7 +19,8 @@ import {
   Wind,
   Droplets,
   Compass,
-  Radio
+  Radio,
+  Wrench
 } from "lucide-react";
 
 // Modular Bento Dashboard Components
@@ -37,11 +38,13 @@ import { ControlPanelModal } from "@/components/dashboard/ControlPanelModal";
 export default function Dashboard() {
   const { 
     telemetry, 
+    fsm,
     fsmCurrentState, 
     updateTelemetry, 
     isWsConnected, 
     espConnected, 
-    handleLiveTelemetry 
+    handleLiveTelemetry,
+    toggleDevMode
   } = useStore();
 
   const [showControlPanel, setShowControlPanel] = useState(false);
@@ -219,9 +222,11 @@ export default function Dashboard() {
           <span className={`px-2.5 py-0.5 rounded-full font-bold tracking-wider ${
             !espConnected || fsmCurrentState === 'HAZARD'
               ? 'bg-error/20 text-error'
-              : 'bg-primary/20 text-primary'
+              : (fsm?.devMode || fsmCurrentState === 'DEV')
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                : 'bg-primary/20 text-primary'
           }`}>
-            Phase: {espConnected ? fsmCurrentState : 'OFFLINE'}
+            Phase: {espConnected ? (fsm?.devMode || fsmCurrentState === 'DEV' ? 'DEV_BENCH' : fsmCurrentState) : 'OFFLINE'}
           </span>
           <span className="font-bold text-on-surface font-mono">
             {formatRuntime(fsmRuntime)}
@@ -251,7 +256,20 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => toggleDevMode()}
+            className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold font-clash tracking-wider uppercase transition-all duration-200 cursor-pointer ${
+              fsm?.devMode || fsmCurrentState === 'DEV'
+                ? 'bg-amber-500 text-black shadow-md hover:bg-amber-400 font-extrabold'
+                : 'bg-surface-container text-on-surface-variant border border-outline-variant/60 hover:text-amber-400 hover:border-amber-400/30'
+            }`}
+            title="Toggle Bench Development Mode"
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            <span>{fsm?.devMode || fsmCurrentState === 'DEV' ? 'DEV MODE: ACTIVE' : 'DEV MODE'}</span>
+          </button>
+
           <button
             onClick={() => setShowControlPanel(true)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold font-clash tracking-wider uppercase transition-all duration-200 cursor-pointer ${

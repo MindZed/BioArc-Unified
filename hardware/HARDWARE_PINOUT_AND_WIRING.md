@@ -15,11 +15,11 @@
 | **GPIO 4** | Submersible Water Temp (`DS18B20`) | OneWire | Bidirectional | 3.3V / 5V | Open-drain | **Requires $4.7\text{k}\Omega$ pull-up resistor** between GPIO 4 and 3.3V/5V rail! |
 | **GPIO 18** | Ultrasonic Distance (`JSN-SR04T` / `NewPing`) | Digital | Output (`TRIG`) | 3.3V / 5V | Active-HIGH pulse | Sends $10\mu\text{s}$ trigger pulse to ultrasonic transducer. |
 | **GPIO 19** | Ultrasonic Distance (`JSN-SR04T` / `NewPing`) | Digital | Input (`ECHO`) | 3.3V (5V tolerant divider) | Active-HIGH pulse | Measures echo return time. *If using 5V JSN-SR04T, use voltage divider to protect ESP32 3.3V pin!* |
-| **GPIO 33** | Media Intake Solenoid Valve (`Relay 1`) | Relay Driver | Output | 5V / 3.3V | Active-LOW (or HIGH*) | Doses fresh nutrient water / media. Controlled by `relays.setIntake()`. |
-| **GPIO 32** | Photoperiod Grow Light Array (`Relay 2`) | Relay Driver | Output | 5V / 3.3V | Active-HIGH* (or LOW*) | High-intensity LED lighting for photosynthesis. Controlled by `relays.setLight()`. |
-| **GPIO 25** | Aeration Air Sparger Pump (`SSR 1`) | Solid State Relay | Output | 3.3V / 5V | Active-LOW (or HIGH*) | $CO_2$ / air oxygenation bubbling. Controlled by `relays.setAir()`. |
-| **GPIO 26** | Outtake Harvest Drain Valve (`Relay 3`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Drains dense algae culture during harvest. Controlled by `relays.setOuttake()`. |
-| **GPIO 27** | Mechanical Agitator Motor / Brush (`Relay 4`)| Relay Driver | Output | 5V / 3.3V | Active-LOW | Cell suspension stirring to prevent biofouling. Controlled by `relays.setAgitator()`. |
+| **GPIO 33** | Media Intake Solenoid Valve (`Relay 1`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Doses fresh nutrient water / media. Controlled by `relays.setIntake()`. |
+| **GPIO 32** | Outtake Harvest Drain Valve (`Relay 3`) | Relay Driver | Output | 5V / 3.3V | Active-HIGH | Drains dense algae culture during harvest. Wired to single-channel module (HIGH=ON, LOW=OFF). Controlled by `relays.setOuttake()`. |
+| **GPIO 25** | Aeration Air Sparger Pump (`SSR 1`) | Solid State Relay | Output | 3.3V / 5V | Active-LOW | $CO_2$ / air oxygenation bubbling. Controlled by `relays.setAir()`. |
+| **GPIO 26** | Mechanical Agitator Motor / Brush (`Relay 4`)| Relay Driver | Output | 5V / 3.3V | Active-LOW | Cell suspension stirring to prevent biofouling. Moved from Pin 27. Controlled by `relays.setAgitator()`. |
+| **GPIO 27** | Photoperiod Grow Light Array (`Relay 2`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | High-intensity LED lighting for photosynthesis. Moved from Pin 32. Controlled by `relays.setLight()`. |
 | **GPIO 23** | 12V Headspace Exhaust Fan (`Relay 5`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Evacuates heat (>34°C) & grow light heat. Controlled by `relays.setExhaustFan()`. |
 | **GPIO 13** | OLED Nav Button A / Touch Channel 4 | Digital / Touch | Input | 3.3V | Pull-Up / Touch | *Reserved for future OLED menu navigation.* |
 | **GPIO 14** | OLED Nav Button B / Touch Channel 6 | Digital / Touch | Input | 3.3V | Pull-Up / Touch | *Reserved for future OLED menu navigation.* |

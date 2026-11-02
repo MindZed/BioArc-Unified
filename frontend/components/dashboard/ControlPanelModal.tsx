@@ -6,7 +6,7 @@
 import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useSession } from "next-auth/react";
-import { Settings, X, Lock, AlertOctagon, RotateCw, Play, Flame, ShieldAlert } from "lucide-react";
+import { Settings, X, Lock, AlertOctagon, RotateCw, Play, ShieldAlert, Timer, Activity } from "lucide-react";
 
 interface ControlPanelModalProps {
   isOpen: boolean;
@@ -77,6 +77,18 @@ export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
               </h3>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
+                  onClick={() => sendActionCommand('pulse_intake')}
+                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Timer className="w-3.5 h-3.5 text-cyan-400" /> Jog Inlet (5s)
+                </button>
+                <button
+                  onClick={() => sendActionCommand('pulse_outtake')}
+                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Timer className="w-3.5 h-3.5 text-amber-400" /> Jog Outlet (5s)
+                </button>
+                <button
                   onClick={() => sendActionCommand('drain_all')}
                   className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors cursor-pointer"
                 >
@@ -101,20 +113,32 @@ export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
                   Sample Color (30s)
                 </button>
                 <button
+                  onClick={() => sendActionCommand('diagnose')}
+                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Activity className="w-3.5 h-3.5 text-teal-400" /> Pre-Flight Diag
+                </button>
+                <button
                   onClick={() => sendActionCommand('clear_hazard')}
                   className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors cursor-pointer"
                 >
                   Clear Hazard
                 </button>
                 <button
+                  onClick={() => sendActionCommand('stop_all')}
+                  className="py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Stop All Relays
+                </button>
+                <button
                   onClick={() => sendActionCommand('restart')}
-                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <RotateCw className="w-3.5 h-3.5 text-amber-400" /> Restart ESP32
                 </button>
                 <button
                   onClick={() => sendActionCommand('demo_cycle')}
-                  className="py-2.5 px-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl text-xs font-bold border border-primary/30 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  className="py-2.5 px-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl text-xs font-bold border border-primary/30 transition-colors col-span-2 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5" /> Run Demo Cycle
                 </button>

@@ -43,6 +43,9 @@ interface BioArcStore {
   setDistEmpty: () => Promise<boolean>;
   setDistFull: () => Promise<boolean>;
   pulseIntake: () => Promise<boolean>;
+  pulseOuttake: () => Promise<boolean>;
+  stopAll: () => Promise<boolean>;
+  runDiagnostics: () => Promise<boolean>;
   
   // UI & App Actions
   toggleSidebar: () => void;
@@ -181,6 +184,17 @@ export const useStore = create<BioArcStore>((set, get) => ({
         else if (action === 'dev_mode_off') set({ fsmCurrentState: 'IDLE', fsm: { ...currentFsm, mode: 'AUTONOMOUS', devMode: false } });
         else if (action === 'fan_on') set({ fsm: { ...currentFsm, exhaustFan: true } });
         else if (action === 'fan_off') set({ fsm: { ...currentFsm, exhaustFan: false } });
+        else if (action === 'stop_all' || action === 'kill_all') set({
+          fsm: {
+            ...currentFsm,
+            inletPump: false,
+            outletPump: false,
+            airCompressor: false,
+            ledPanels: false,
+            agitator: false,
+            exhaustFan: false
+          }
+        });
 
         return true;
       } else {
@@ -211,6 +225,15 @@ export const useStore = create<BioArcStore>((set, get) => ({
   },
   pulseIntake: async () => {
     return get().sendActionCommand('pulse_intake');
+  },
+  pulseOuttake: async () => {
+    return get().sendActionCommand('pulse_outtake');
+  },
+  stopAll: async () => {
+    return get().sendActionCommand('stop_all');
+  },
+  runDiagnostics: async () => {
+    return get().sendActionCommand('diagnose');
   },
 
   sendConfigCommand: async (config: any) => {

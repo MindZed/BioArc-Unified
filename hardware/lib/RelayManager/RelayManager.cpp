@@ -10,12 +10,13 @@ RelayManager::RelayManager(uint8_t pinLight, uint8_t pinIntake, uint8_t pinOutta
     _agitatorOn = false;
     _fanOn = false;
 
-    // Default Hardware Configuration:
-    // Grow Lights (Pin 32) is Active-HIGH (single-channel replacement)
-    // All other relay channels (including Fan on GPIO 23) are Active-LOW
-    _lightActiveHigh = true;
+    // Hardware Relay Polarities:
+    // Pin 32 (Harvest Pump) is on the single-channel replacement module (Active-HIGH)
+    // Pin 27 (Grow Lights) is on the multi-channel relay module (Active-LOW)
+    // All other relay channels (Pins 33, 25, 26, 23) are Active-LOW
+    _lightActiveHigh = false;
     _intakeActiveHigh = false;
-    _outtakeActiveHigh = false;
+    _outtakeActiveHigh = true;
     _airActiveHigh = false;
     _agitatorActiveHigh = false;
     _fanActiveHigh = false;

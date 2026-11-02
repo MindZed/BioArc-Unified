@@ -5,17 +5,25 @@
 #include <U8g2lib.h>
 #include <Wire.h>
 
-// 1 for SH1106 (standard 1.3" I2C OLED), 0 for SSD1306 (standard 0.96" or alternate 1.3")
 #ifndef OLED_IS_SH1106
 #define OLED_IS_SH1106 1
 #endif
 
+// Consolidated 3-Screen Architecture
 enum DisplayPage {
-    PAGE_TELEMETRY = 0,
-    PAGE_ACTUATORS = 1,
-    PAGE_GEOMETRY  = 2,
-    PAGE_NETWORK   = 3,
-    PAGE_DEV_BENCH = 4
+    PAGE_TELEMETRY = 0, // Hero Bioreactor Vessel & Vitals
+    PAGE_ACTUATORS = 1, // Interactive Actuator Bench
+    PAGE_GEOMETRY  = 2  // System, Calibration & Network Diagnostics
+};
+
+enum ActuatorFocus {
+    FOCUS_LIGHT    = 0,
+    FOCUS_AIR      = 1,
+    FOCUS_INLET    = 2,
+    FOCUS_OUTLET   = 3,
+    FOCUS_AGITATOR = 4,
+    FOCUS_FAN      = 5,
+    FOCUS_KILL_ALL = 6
 };
 
 class DisplayManager {
@@ -30,12 +38,18 @@ public:
     void setDevData(bool devMode, int rawDistCm, bool fanOn = false);
     void setActuatorStates(bool light, bool air, bool intake, bool outtake, bool agitator, bool fan);
     void setCalibrationData(int distEmpty, int distFull);
+    void setJogData(uint8_t intakeSec, uint8_t outtakeSec);
     
-    // Button navigation controls
+    // Page & Actuator Navigation
     void nextPage();
     void prevPage();
     void setPage(uint8_t page);
     uint8_t getCurrentPage() const { return _currentPage; }
+    
+    void stepActuatorSelection();
+    uint8_t getSelectedActuator() const { return _selectedActuator; }
+    void setSelectedActuator(uint8_t act) { _selectedActuator = act % 7; }
+
     void toggleAutoCycle();
     bool isAutoCycle() const { return _autoCycle; }
     void showToast(const char* msg, uint16_t durationMs = 1500);
@@ -54,17 +68,22 @@ private:
     unsigned long _lastUpdate;
     unsigned long _lastPageFlip;
     unsigned long _manualHoldUntil;
-    const unsigned long REFRESH_RATE = 200;      // Refresh display at 5Hz
-    const unsigned long AUTO_FLIP_TIME = 5000;   // 5s per page during auto-cycle
+    const unsigned long REFRESH_RATE = 100;      // 10Hz smooth refresh
+    const unsigned long AUTO_FLIP_TIME = 6000;   // 6s per page during auto-cycle
 
     uint8_t _currentPage;
+    uint8_t _selectedActuator;
     bool _autoCycle;
     bool _devMode;
     int _rawDistCm;
     bool _fanOn;
 
+    // Jog countdowns
+    uint8_t _intakeJogSec;
+    uint8_t _outtakeJogSec;
+
     // Toast popup
-    char _toastMsg[20];
+    char _toastMsg[22];
     unsigned long _toastUntil;
 
     // Actuator states
@@ -85,14 +104,16 @@ private:
     int _waterLevel;
     String _timeStr;
 
-    // Drawing Views
-    void drawHeader(const char* title);
+    // Animation frames
+    uint8_t _wavePhase;
+    uint8_t _bubblePhase;
+
+    // Screen Renderers
+    void drawHeader(const char* title = nullptr);
     void drawPaginationDots(uint8_t current, uint8_t total);
-    void drawTelemetryView();
+    void drawHeroVesselView();
     void drawActuatorsView();
     void drawGeometryView();
-    void drawNetworkDiagView();
-    void drawDevView();
     void drawHazardView();
     void drawToastOverlay();
 };

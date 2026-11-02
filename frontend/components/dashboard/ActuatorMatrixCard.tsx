@@ -6,21 +6,22 @@
 import React from "react";
 import { useStore } from "@/lib/store";
 import { useSession } from "next-auth/react";
-import { ShieldAlert, Wrench, Timer, Droplet, Lock, LockOpen } from "lucide-react";
+import { ShieldAlert, Wrench, Timer, Droplet, Lock, LockOpen, OctagonAlert } from "lucide-react";
 
 export function ActuatorMatrixCard() {
   const { fsm, fsmCurrentState, sendActionCommand } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
-  const isManual = fsmCurrentState === 'MANUAL' || fsm.devMode;
+  const isManual = fsmCurrentState === 'MANUAL' || fsmCurrentState === 'DEV' || fsm.devMode;
+  const isDevActive = fsm.devMode || fsmCurrentState === 'DEV';
   const activeCount = Object.values(fsm).filter(v => v === true).length;
 
   return (
     <div className="col-span-2 md:col-span-3 lg:col-span-2 lg:row-span-2 bg-surface-container-lowest border border-outline-variant flex flex-col motion-card min-h-[380px] font-clash shadow-md p-4 rounded-2xl opacity-0 hover:border-outline/50 transition-colors duration-300 relative overflow-hidden">
       
-      {/* Admin Access Lock Overlay */}
-      {!isAdmin && (
+      {/* Admin Access Lock Overlay (Bypassed if Dev Mode was activated) */}
+      {!isAdmin && !isDevActive && (
         <div className="absolute inset-0 z-20 bg-background/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6">
           <div className="w-12 h-12 rounded-full bg-error/10 border border-error/20 flex items-center justify-center mb-3">
             <ShieldAlert className="w-6 h-6 text-error" />
@@ -34,9 +35,16 @@ export function ActuatorMatrixCard() {
 
       {/* Card Header */}
       <div className="flex justify-between items-center mb-3">
-        <h3 className="font-satoshi text-[13px] font-semibold text-on-surface-variant uppercase tracking-wider">
-          Actuator Matrix
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-satoshi text-[13px] font-semibold text-on-surface-variant uppercase tracking-wider">
+            Actuator Matrix
+          </h3>
+          {isDevActive && (
+            <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">
+              DEV BENCH
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant font-mono">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           <span>{activeCount} Active</span>
@@ -44,7 +52,7 @@ export function ActuatorMatrixCard() {
       </div>
 
       {/* Actuator Relay Items Grid */}
-      <ul className={`flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-1.5 ${!isAdmin ? 'opacity-20 pointer-events-none' : ''}`}>
+      <ul className={`flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-1.5 ${!isAdmin && !isDevActive ? 'opacity-20 pointer-events-none' : ''}`}>
         <ActuatorRow
           name="Inlet Pump"
           icon="water_drop"
@@ -89,8 +97,8 @@ export function ActuatorMatrixCard() {
         />
       </ul>
 
-      {/* Admin Action Footers */}
-      {isAdmin && (
+      {/* Action Footers */}
+      {(isAdmin || isDevActive) && (
         <div className="mt-3 pt-3 border-t border-outline-variant/50 flex flex-col gap-2">
           
           {/* Commissioning Fill Button (When Standby) */}
@@ -104,40 +112,61 @@ export function ActuatorMatrixCard() {
             </button>
           )}
 
-          {/* Manual Mode Toggle */}
-          <button
-            onClick={() => sendActionCommand(fsmCurrentState === 'MANUAL' ? 'manual_mode_off' : 'manual_mode_on')}
-            className={`w-full py-2 rounded-xl text-[11px] font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${
-              fsmCurrentState === 'MANUAL'
-                ? 'bg-primary text-on-primary shadow-md hover:bg-primary/90'
-                : 'bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40'
-            }`}
-          >
-            {fsmCurrentState === 'MANUAL' ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-            {fsmCurrentState === 'MANUAL' ? 'Disable Manual Override' : 'Enable Manual Override'}
-          </button>
-
-          {/* Dev Mode & 5s Intake Jog Quick Tools */}
+          {/* Dev Mode & Manual Override Toggles */}
           <div className="flex gap-1.5">
             <button
-              onClick={() => sendActionCommand(fsm.devMode ? 'dev_mode_off' : 'dev_mode_on')}
+              onClick={() => sendActionCommand(isDevActive ? 'dev_mode_off' : 'dev_mode_on')}
               className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer ${
-                fsm.devMode
+                isDevActive
                   ? 'bg-amber-500 text-black shadow-md font-extrabold'
                   : 'bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40'
               }`}
             >
-              <Wrench className="w-3 h-3" />
-              {fsm.devMode ? 'Dev Mode: ACTIVE' : 'Dev Mode: OFF'}
+              <Wrench className="w-3.5 h-3.5" />
+              {isDevActive ? 'Dev Mode: ACTIVE' : 'Enable Dev Mode'}
             </button>
 
             <button
+              onClick={() => sendActionCommand(fsmCurrentState === 'MANUAL' ? 'manual_mode_off' : 'manual_mode_on')}
+              className={`py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer ${
+                fsmCurrentState === 'MANUAL'
+                  ? 'bg-primary text-on-primary shadow-sm hover:bg-primary/90'
+                  : 'bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40'
+              }`}
+              title="Toggle manual override state"
+            >
+              {fsmCurrentState === 'MANUAL' ? <LockOpen className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+              {fsmCurrentState === 'MANUAL' ? 'Manual' : 'Auto'}
+            </button>
+          </div>
+
+          {/* Dev Bench Quick Jog Tools: Inlet 5s, Outlet 5s, Halt All */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
               onClick={() => sendActionCommand('pulse_intake')}
-              className="py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40 flex items-center gap-1 cursor-pointer transition-colors"
-              title="Prime intake pump for 5 seconds"
+              className="py-1.5 px-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              title="Prime inlet pump for 5 seconds"
             >
               <Timer className="w-3 h-3 text-cyan-400" />
-              Jog 5s
+              Inlet 5s
+            </button>
+
+            <button
+              onClick={() => sendActionCommand('pulse_outtake')}
+              className="py-1.5 px-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              title="Pulse harvest outlet pump for 5 seconds"
+            >
+              <Timer className="w-3 h-3 text-amber-400" />
+              Outlet 5s
+            </button>
+
+            <button
+              onClick={() => sendActionCommand('stop_all')}
+              className="py-1.5 px-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-error/15 hover:bg-error/25 text-error border border-error/30 flex items-center justify-center gap-1 cursor-pointer transition-colors"
+              title="Halt all actuators immediately"
+            >
+              <OctagonAlert className="w-3 h-3 text-error" />
+              Halt All
             </button>
           </div>
         </div>
