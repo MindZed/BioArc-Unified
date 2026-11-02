@@ -1052,6 +1052,7 @@ void Task_Optical_Sampling(void* pvParameters) {
 void Task_Network_Telemetry(void* pvParameters) {
     unsigned long lastTelemetryTime = 0;
     unsigned long lastHeartbeatTime = 0;
+    static bool networkServicesStarted = false;
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -1059,6 +1060,19 @@ void Task_Network_Telemetry(void* pvParameters) {
         bool wifiOk = (WiFi.status() == WL_CONNECTED);
 
         if (wifiOk) {
+            if (!networkServicesStarted) {
+                networkServicesStarted = true;
+                portal.startWebServerOnly();
+                TelnetStream.begin();
+                MDNS.begin("bioarc");
+                ArduinoOTA.onStart([]() { relays.stopAll(); });
+                ArduinoOTA.setPassword("bioarc2026");
+                ArduinoOTA.begin();
+                timeManager.setupNTP();
+                mqtt.begin(netConfig.mqttBroker.c_str(), netConfig.mqttPort, netConfig.mqttUser.c_str(), netConfig.mqttPass.c_str());
+                mqtt.setCallback(mqttCallback);
+                Serial.printf("[SYSTEM] Network services started dynamically on IP: %s\n", WiFi.localIP().toString().c_str());
+            }
             ArduinoOTA.handle();
             mqtt.update();
 
@@ -1417,7 +1431,7 @@ void setup() {
     while (wifiMulti.run() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
-        if (millis() - wifiStart > 12000) {
+        if (millis() - wifiStart > 25000) {
             Serial.println("\n[WARNING] Wi-Fi timeout! Captive Portal fallback active.");
             break;
         }
