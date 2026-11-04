@@ -11,6 +11,9 @@ public:
     void begin();
     void update(); // Handles the non-blocking read cycle
     float getWaterTemp(); // Returns the most recently fetched temperature
+    uint8_t getDeviceCount();
+    bool hasPresence();
+    void reinit();
 
 private:
     uint8_t _pin;

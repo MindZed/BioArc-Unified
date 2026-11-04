@@ -8,15 +8,46 @@ WaterTempSensor::WaterTempSensor(uint8_t pin) : _pin(pin), _oneWire(pin), _senso
 }
 
 void WaterTempSensor::begin() {
+    pinMode(_pin, INPUT_PULLUP); // Enable ESP32 internal pull-up as assistance
     _sensors.begin();
-    // CRITICAL: This stops the sensor from pausing the Arduino during reads
     _sensors.setWaitForConversion(false); 
-    Serial.println("[SYSTEM] DS18B20 Water Temp Sensor Initialized (Async Mode).");
-    TelnetStream.println("[SYSTEM] DS18B20 Water Temp Sensor Initialized (Async Mode).");
+    uint8_t count = _sensors.getDeviceCount();
+    Serial.printf("[SYSTEM] DS18B20 Water Temp Sensor Initialized (Async Mode, %d device(s) on Pin %d).\n", count, _pin);
+    TelnetStream.printf("[SYSTEM] DS18B20 Water Temp Sensor Initialized (Async Mode, %d device(s) on Pin %d).\n", count, _pin);
+}
+
+bool WaterTempSensor::hasPresence() {
+    return _oneWire.reset() == 1;
+}
+
+uint8_t WaterTempSensor::getDeviceCount() {
+    return _sensors.getDeviceCount();
+}
+
+void WaterTempSensor::reinit() {
+    pinMode(_pin, INPUT_PULLUP);
+    _sensors.begin();
+    _sensors.setWaitForConversion(false);
 }
 
 void WaterTempSensor::update() {
     unsigned long currentMillis = millis();
+
+    // If no devices were found yet, try re-discovering every 3 seconds
+    if (_sensors.getDeviceCount() == 0) {
+        if (currentMillis - _lastRequestTime >= 3000) {
+            _lastRequestTime = currentMillis;
+            if (_oneWire.reset() == 1) {
+                _sensors.begin();
+                _sensors.setWaitForConversion(false);
+                if (_sensors.getDeviceCount() > 0) {
+                    Serial.println("[SYSTEM] DS18B20 hot-plug detected! Devices found.");
+                    TelnetStream.println("[SYSTEM] DS18B20 hot-plug detected! Devices found.");
+                }
+            }
+        }
+        return;
+    }
 
     // 1. Tell the sensor to start measuring the temperature
     if (!_requestPending && (currentMillis - _lastRequestTime >= READ_INTERVAL)) {
@@ -29,11 +60,14 @@ void WaterTempSensor::update() {
     if (_requestPending && (currentMillis - _lastRequestTime >= 750)) {
         float temp = _sensors.getTempCByIndex(0);
         
-        if (temp != DEVICE_DISCONNECTED_C && temp != 85.0) {
+        if (temp != DEVICE_DISCONNECTED_C && temp != 85.0 && temp > -50.0f && temp < 85.0f) {
             _lastTemp = temp;
         } else {
             Serial.println("[WARNING] DS18B20 disconnected or read error.");
             TelnetStream.println("[WARNING] DS18B20 disconnected or read error.");
+            if (_oneWire.reset() != 1) {
+                _lastTemp = -127.0f;
+            }
         }
         _requestPending = false; // Reset the cycle
     }

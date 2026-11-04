@@ -358,15 +358,43 @@ void runPreFlightDiagnostics() {
     TelnetStream.printf("[DIAG] I2C Scan Complete: %d active devices identified.\n", count);
 
     // 2. DS18B20 OneWire Bus Test
+    pinMode(ONE_WIRE_BUS, INPUT);
+    int rawIn = digitalRead(ONE_WIRE_BUS);
+    pinMode(ONE_WIRE_BUS, INPUT_PULLUP);
+    int rawPull = digitalRead(ONE_WIRE_BUS);
+    Serial.printf("[DIAG] Checking OneWire Bus on Pin %d (Raw: %d, Pull-Up: %d)...\n", ONE_WIRE_BUS, rawIn, rawPull);
+    TelnetStream.printf("[DIAG] Checking OneWire Bus on Pin %d (Raw: %d, Pull-Up: %d)...\n", ONE_WIRE_BUS, rawIn, rawPull);
+    bool presence = waterTemp.hasPresence();
+    waterTemp.reinit();
+    uint8_t dsCount = waterTemp.getDeviceCount();
+    Serial.printf("  -> Pin %d Presence: %s | Device Count: %d\n", ONE_WIRE_BUS, presence ? "PULSE DETECTED" : "NO PULSE", dsCount);
+    TelnetStream.printf("  -> Pin %d Presence: %s | Device Count: %d\n", ONE_WIRE_BUS, presence ? "PULSE DETECTED" : "NO PULSE", dsCount);
+
     waterTemp.update();
     delay(800);
     waterTemp.update();
     float wT = waterTemp.getWaterTemp();
     Serial.printf("[DIAG] DS18B20 Water Temperature: %.2f C -> ", wT);
-    if (wT > -50.0f && wT < 80.0f && wT != 85.0f) {
+    TelnetStream.printf("[DIAG] DS18B20 Water Temperature: %.2f C -> ", wT);
+    if (wT > -50.0f && wT < 80.0f && wT != 85.0f && wT != -127.0f) {
         Serial.println("HEALTHY");
+        TelnetStream.println("HEALTHY");
     } else {
         Serial.println("FAULT / DISCONNECTED (Check 4.7k pull-up on Pin 4)");
+        TelnetStream.println("FAULT / DISCONNECTED (Check 4.7k pull-up on Pin 4)");
+        
+        // Scan other GPIOs to verify if wire is on another pin
+        Serial.println("[DIAG] Quick-probing alternate pins for 1-Wire presence...");
+        TelnetStream.println("[DIAG] Quick-probing alternate pins for 1-Wire presence...");
+        const uint8_t scanPins[] = {2, 5, 12, 15, 16, 17};
+        for (uint8_t p : scanPins) {
+            pinMode(p, INPUT_PULLUP);
+            OneWire probe(p);
+            if (probe.reset() == 1) {
+                Serial.printf("  -> [FOUND] 1-Wire Presence Pulse DETECTED on Pin %d!\n", p);
+                TelnetStream.printf("  -> [FOUND] 1-Wire Presence Pulse DETECTED on Pin %d!\n", p);
+            }
+        }
     }
 
     // 3. Ultrasonic Sonar Test
@@ -408,6 +436,8 @@ String getTelemetryJSON() {
         doc["actuatorAgitator"] = sharedTelemetry.agitatorOn;
         doc["actuatorFan"] = sharedTelemetry.fanOn;
         doc["airActiveHigh"] = relays.isAirActiveHigh();
+        doc["wTempCount"] = waterTemp.getDeviceCount();
+        doc["wTempPresence"] = waterTemp.hasPresence();
         doc["tcsR"] = sharedTelemetry.tcsR;
         doc["tcsG"] = sharedTelemetry.tcsG;
         doc["tcsB"] = sharedTelemetry.tcsB;
@@ -585,6 +615,12 @@ void Task_FSM_Control(void* pvParameters) {
                 char pBuf[64];
                 snprintf(pBuf, sizeof(pBuf), "Air Pump SSR Polarity Toggled: %s", !cur ? "Active-HIGH" : "Active-LOW");
                 mqtt.publishLog("info", pBuf);
+            }
+            else if (action == "reinit_temp") {
+                waterTemp.reinit();
+                char tBuf[64];
+                snprintf(tBuf, sizeof(tBuf), "DS18B20 Re-initialized: %d device(s) found", waterTemp.getDeviceCount());
+                mqtt.publishLog("info", tBuf);
             }
             else if (action == "set_dist_empty") {
                 int curD = 0;
