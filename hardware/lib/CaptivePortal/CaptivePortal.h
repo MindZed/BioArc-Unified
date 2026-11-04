@@ -29,6 +29,7 @@ private:
     WebServer _server;
     DNSServer _dnsServer;
     bool _active;
+    bool _dnsActive;
     
     CommandCallback _commandCallback;
     TelemetryCallback _telemetryCallback;

@@ -247,6 +247,7 @@ int lastAgitationMin = -1;
 bool sensorsReady = false;
 unsigned long systemReadyTime = 0;
 String bootReasonStr = "";
+bool networkServicesStarted = false;
 
 // Demo Mode Tracking
 bool demoMode = false;
@@ -1052,7 +1053,6 @@ void Task_Optical_Sampling(void* pvParameters) {
 void Task_Network_Telemetry(void* pvParameters) {
     unsigned long lastTelemetryTime = 0;
     unsigned long lastHeartbeatTime = 0;
-    static bool networkServicesStarted = false;
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -1450,6 +1450,7 @@ void setup() {
         timeManager.setupNTP();
         mqtt.begin(netConfig.mqttBroker.c_str(), netConfig.mqttPort, netConfig.mqttUser.c_str(), netConfig.mqttPass.c_str());
         mqtt.setCallback(mqttCallback);
+        networkServicesStarted = true;
     }
 
     // 8. Launch FreeRTOS Tasks

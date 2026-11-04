@@ -1,7 +1,7 @@
 #include "CaptivePortal.h"
 #include "dashboard.h"
 
-CaptivePortal::CaptivePortal() : _server(80), _active(false) {
+CaptivePortal::CaptivePortal() : _server(80), _active(false), _dnsActive(false) {
     _commandCallback = nullptr;
     _telemetryCallback = nullptr;
     _saveConfigCallback = nullptr;
@@ -14,6 +14,7 @@ void CaptivePortal::begin(const char* apSSID, const char* apPassword) {
     
     // Captive portal DNS redirect (resolve all to our IP)
     _dnsServer.start(53, "*", WiFi.softAPIP());
+    _dnsActive = true;
     
     _server.on("/", HTTP_GET, std::bind(&CaptivePortal::handleRoot, this));
     _server.on("/config", HTTP_GET, std::bind(&CaptivePortal::handleConfigGet, this));
@@ -30,6 +31,7 @@ void CaptivePortal::begin(const char* apSSID, const char* apPassword) {
 }
 
 void CaptivePortal::startWebServerOnly() {
+    _dnsActive = false;
     _server.on("/", HTTP_GET, std::bind(&CaptivePortal::handleRoot, this));
     _server.on("/config", HTTP_GET, std::bind(&CaptivePortal::handleConfigGet, this));
     _server.on("/config", HTTP_POST, std::bind(&CaptivePortal::handleConfigPost, this));
@@ -46,7 +48,9 @@ void CaptivePortal::startWebServerOnly() {
 
 void CaptivePortal::update() {
     if (_active) {
-        _dnsServer.processNextRequest();
+        if (_dnsActive) {
+            _dnsServer.processNextRequest();
+        }
         _server.handleClient();
     }
 }
@@ -54,7 +58,10 @@ void CaptivePortal::update() {
 void CaptivePortal::stop() {
     if (_active) {
         _server.stop();
-        _dnsServer.stop();
+        if (_dnsActive) {
+            _dnsServer.stop();
+            _dnsActive = false;
+        }
         WiFi.softAPdisconnect(true);
         _active = false;
         Serial.println("[SYSTEM] Captive Portal Stopped.");

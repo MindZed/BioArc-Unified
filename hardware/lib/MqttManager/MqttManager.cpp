@@ -17,6 +17,9 @@ void MqttManager::begin(const char* mqttServer, int mqttPort, const char* mqttUs
     // Enable MQTTS TLS (Accept Let's Encrypt certificates securely without hardcoded CA expiration)
     _espClient.setInsecure();
     
+    // Safety: 2-second socket timeout ensures FreeRTOS Core 0 watchdog is never starved
+    _client.setSocketTimeout(2);
+
     // Larger buffer for ML telemetry JSON
     _client.setBufferSize(1024);
 }
