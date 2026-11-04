@@ -28,7 +28,8 @@ public:
                           float greenRatio, float grRatio, float pseudoOD, 
                           float vegIndex, float chlA, float growthRateMu, bool hasBaseline,
                           bool photoperiodActive, uint8_t currentHr, bool storeThis,
-                          bool devMode = false, int rawDist = 0, int levelPct = 0, int distEmpty = 33, int distFull = 7);
+                          bool devMode = false, int rawDist = 0, int levelPct = 0, int distEmpty = 33, int distFull = 7,
+                          bool oledAlwaysOn = false, bool oledSleeping = false);
     void publishLog(const char* level, const char* msg);
 
 private:

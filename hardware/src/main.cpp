@@ -82,6 +82,7 @@ struct SysConfig {
     bool enableAgitator;
     bool enableAutoRefill;
     bool enableFan;
+    bool oledAlwaysOn;
     uint8_t fillPct;
     int distEmpty;
     int distFull;
@@ -122,6 +123,7 @@ void loadConfig() {
     config.enableAgitator = preferences.getBool("enAgitator", true);
     config.enableAutoRefill = preferences.getBool("enRefill", true);
     config.enableFan = preferences.getBool("enFan", true);
+    config.oledAlwaysOn = preferences.getBool("oledAlways", false);
     config.fillPct = preferences.getUChar("fillPct", 100);
     config.distEmpty = preferences.getInt("distEmpty", 33);
     config.distFull = preferences.getInt("distFull", 7);
@@ -151,6 +153,7 @@ void saveConfig() {
     preferences.putBool("enAgitator", config.enableAgitator);
     preferences.putBool("enRefill", config.enableAutoRefill);
     preferences.putBool("enFan", config.enableFan);
+    preferences.putBool("oledAlways", config.oledAlwaysOn);
     preferences.putUChar("fillPct", config.fillPct);
     preferences.putInt("distEmpty", config.distEmpty);
     preferences.putInt("distFull", config.distFull);
@@ -449,6 +452,8 @@ String getTelemetryJSON() {
         doc["rawDistanceCM"] = sharedTelemetry.rawDistanceCM;
         doc["distEmpty"] = config.distEmpty;
         doc["distFull"] = config.distFull;
+        doc["oledAlwaysOn"] = config.oledAlwaysOn;
+        doc["oledSleeping"] = displays.isScreenSleeping();
         doc["fanOn"] = sharedTelemetry.fanOn;
         doc["devMode"] = sharedTelemetry.devMode;
         doc["actuatorLight"] = sharedTelemetry.lightOn;
@@ -532,6 +537,7 @@ void Task_FSM_Control(void* pvParameters) {
             String action = String(cmdBuf);
             action.trim();
             Serial.printf("[FSM] Processing Command: %s\n", action.c_str());
+            displays.wakeScreen();
 
             if (action == "fill" && currentState == STATE_AWAITING_COMMISSION) {
                 mqtt.publishLog("info", "Commissioning Fill Started.");
@@ -606,6 +612,24 @@ void Task_FSM_Control(void* pvParameters) {
                 manualFanOverride = false;
                 relays.setExhaustFan(false);
                 mqtt.publishLog("info", "Exhaust Fan Manual OFF");
+            }
+            else if (action == "oled_always_on") {
+                config.oledAlwaysOn = true;
+                saveConfig();
+                displays.setAlwaysOn(true);
+                displays.showToast("SHOWCASE: ALWAYS ON", 2000);
+                mqtt.publishLog("info", "OLED Showcase Mode ENABLED (Always-On)");
+            }
+            else if (action == "oled_auto_sleep" || action == "oled_always_off") {
+                config.oledAlwaysOn = false;
+                saveConfig();
+                displays.setAlwaysOn(false);
+                displays.showToast("AUTO-SLEEP: 2 MIN", 2000);
+                mqtt.publishLog("info", "OLED Auto-Sleep ENABLED (2-minute timeout)");
+            }
+            else if (action == "oled_wake") {
+                displays.wakeScreen();
+                mqtt.publishLog("info", "OLED Display Woken");
             }
             else if (action == "pulse_intake") {
                 relays.setIntake(true);
@@ -1270,7 +1294,8 @@ void Task_Network_Telemetry(void* pvParameters) {
                 snap.tcsR, snap.tcsG, snap.tcsB, snap.tcsC,
                 snap.greenRatio, snap.grRatio, snap.pseudoOD, snap.vegIndex, snap.chlA, snap.growthRateMu, snap.hasBaseline,
                 snap.isDaytime, snap.currentHr, storeThis,
-                snap.devMode, snap.rawDistanceCM, snap.waterLevelPct, config.distEmpty, config.distFull
+                snap.devMode, snap.rawDistanceCM, snap.waterLevelPct, config.distEmpty, config.distFull,
+                config.oledAlwaysOn, displays.isScreenSleeping()
             );
         }
 
@@ -1372,6 +1397,10 @@ void Task_Button_Input(void* pvParameters) {
             btn1Pressed = true;
             btn1DownTime = now;
             btn1LongReported = false;
+            if (displays.isScreenSleeping()) {
+                displays.wakeScreen();
+                btn1LongReported = true; // Consume this click to wake up screen
+            }
         } else if (btn1State && btn1Pressed) {
             // Check for Long Press (> 1500ms)
             if (!btn1LongReported && (now - btn1DownTime >= 1500)) {
@@ -1408,6 +1437,10 @@ void Task_Button_Input(void* pvParameters) {
             btn2Pressed = true;
             btn2DownTime = now;
             btn2LongReported = false;
+            if (displays.isScreenSleeping()) {
+                displays.wakeScreen();
+                btn2LongReported = true; // Consume this click to wake up screen
+            }
         } else if (btn2State && btn2Pressed) {
             // Check for Long Press (> 2000ms) -> Toggle Dev Mode!
             if (!btn2LongReported && (now - btn2DownTime >= 2000)) {
@@ -1513,6 +1546,7 @@ void setup() {
     Wire.setTimeOut(30);   // 30ms hardware bus timeout
     if (xSemaphoreTake(xI2CMutex, portMAX_DELAY) == pdTRUE) {
         displays.begin();
+        displays.setAlwaysOn(config.oledAlwaysOn);
         timeManager.begin();
         envSensor.begin();
         colorSensor.begin();

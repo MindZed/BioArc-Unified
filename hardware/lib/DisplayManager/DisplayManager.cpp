@@ -43,6 +43,11 @@ DisplayManager::DisplayManager(uint8_t oled_addr, uint8_t unused)
     _bubblePhase = 0;
     _oledDetected = false;
     _lastProbeTime = 0;
+
+    _screenSleeping = false;
+    _alwaysOn = false;
+    _lastInteractionTime = millis();
+    _sleepTimeoutMs = 120000; // 2 minutes auto-sleep timeout
 }
 
 void DisplayManager::begin() {
@@ -129,7 +134,25 @@ void DisplayManager::setJogData(uint8_t intakeSec, uint8_t outtakeSec) {
     _outtakeJogSec = outtakeSec;
 }
 
+void DisplayManager::wakeScreen() {
+    _lastInteractionTime = millis();
+    if (_screenSleeping) {
+        _screenSleeping = false;
+        if (_oledDetected) {
+            _u8g2.setPowerSave(0); // Power on display panel
+        }
+    }
+}
+
+void DisplayManager::setAlwaysOn(bool alwaysOn) {
+    _alwaysOn = alwaysOn;
+    if (_alwaysOn) {
+        wakeScreen();
+    }
+}
+
 void DisplayManager::nextPage() {
+    wakeScreen();
     _currentPage = (_currentPage + 1) % 3;
     _manualHoldUntil = millis() + 20000;
     
@@ -139,6 +162,7 @@ void DisplayManager::nextPage() {
 }
 
 void DisplayManager::prevPage() {
+    wakeScreen();
     _currentPage = (_currentPage + 2) % 3;
     _manualHoldUntil = millis() + 20000;
     
@@ -148,20 +172,24 @@ void DisplayManager::prevPage() {
 }
 
 void DisplayManager::setPage(uint8_t page) {
+    wakeScreen();
     _currentPage = page % 3;
     _manualHoldUntil = millis() + 20000;
 }
 
 void DisplayManager::stepActuatorSelection() {
+    wakeScreen();
     _selectedActuator = (_selectedActuator + 1) % 7;
 }
 
 void DisplayManager::toggleAutoCycle() {
+    wakeScreen();
     _autoCycle = !_autoCycle;
     showToast(_autoCycle ? "AUTO-CYCLE ON" : "CYCLE PAUSED", 1500);
 }
 
 void DisplayManager::showToast(const char* msg, uint16_t durationMs) {
+    wakeScreen();
     strncpy(_toastMsg, msg, sizeof(_toastMsg) - 1);
     _toastMsg[sizeof(_toastMsg) - 1] = '\0';
     _toastUntil = millis() + durationMs;
@@ -528,6 +556,23 @@ void DisplayManager::update() {
 
     if (!_oledDetected) {
         return; // Skip rendering when display hardware is disconnected
+    }
+
+    // Burn-In Prevention & Auto-Sleep Logic
+    bool isHazard = (strcmp(_state, "HAZARD") == 0 || strcmp(_state, "!!! HAZARD !!!") == 0);
+    if (isHazard) {
+        wakeScreen(); // Immediately wake if hazard occurs
+    }
+
+    if (!_alwaysOn && !isHazard) {
+        if (!_screenSleeping && (currentMillis - _lastInteractionTime >= _sleepTimeoutMs)) {
+            _screenSleeping = true;
+            _u8g2.setPowerSave(1); // Turn off display panel to prevent burn-in
+        }
+    }
+
+    if (_screenSleeping) {
+        return; // Skip drawing when asleep, saving CPU & I2C bandwidth
     }
 
     // Fluid animations

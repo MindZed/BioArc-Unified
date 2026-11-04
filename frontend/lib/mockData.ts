@@ -23,6 +23,8 @@ export interface TelemetryData {
   rawDistanceCm?: number;
   devMode?: boolean;
   fanOn?: boolean;
+  oledAlwaysOn?: boolean;
+  oledSleeping?: boolean;
 }
 
 export interface FSMState {

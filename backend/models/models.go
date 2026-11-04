@@ -81,6 +81,8 @@ type MQTTTelemetryPayload struct {
 	RawDistanceCM int     `json:"rawDistanceCM,omitempty"`
 	DevMode       bool    `json:"devMode,omitempty"`
 	FanOn         bool    `json:"fanOn,omitempty"`
+	OledAlwaysOn  bool    `json:"oledAlwaysOn,omitempty"`
+	OledSleeping  bool    `json:"oledSleeping,omitempty"`
 	Relays        struct {
 		Intake   bool `json:"intake"`
 		Outtake  bool `json:"outtake"`

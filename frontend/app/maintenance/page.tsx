@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
-import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw, Plus, Trash2, Layers, Search, FileText, Loader2, FileUp } from 'lucide-react';
+import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw, Plus, Trash2, Layers, Search, FileText, Loader2, FileUp, Monitor } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
 export default function MaintenancePage() {
@@ -492,6 +492,83 @@ export default function MaintenancePage() {
                   </button>
                 </div>
               )}
+            </div>
+          </motion.div>
+
+          {/* OLED DISPLAY & BURN-IN SHIELD CARD */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.14 }}
+            className="bg-black/40 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between group hover:border-cyan-500/30 transition-all duration-500"
+          >
+            <div className="flex-1 flex flex-col h-full z-10">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                    <Monitor className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-clash text-lg font-semibold text-white tracking-wide">OLED Display & Burn-In Shield</h3>
+                    <p className="text-zinc-400 font-satoshi text-xs">SSD1306/SH1106 128x64 Physical Instrument Panel</p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => sendActionCommand('oled_wake')}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] rounded-xl transition-all text-xs font-satoshi font-semibold text-zinc-300 hover:text-white"
+                      title="Wakes OLED display if sleeping"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Wake Screen
+                    </button>
+                    <button 
+                      onClick={() => sendActionCommand(telemetry?.oledAlwaysOn ? 'oled_auto_sleep' : 'oled_always_on')}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl transition-all text-xs font-satoshi font-semibold cursor-pointer ${
+                        telemetry?.oledAlwaysOn
+                          ? 'bg-amber-500 text-black shadow-md font-bold'
+                          : 'bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-white'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      {telemetry?.oledAlwaysOn ? 'Showcase: Always-On' : 'Auto-Sleep Protected (2m)'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-2">
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Power Profile</span>
+                  <span className="text-xs font-bold font-mono text-cyan-400 mt-1">
+                    {telemetry?.oledAlwaysOn ? 'Showcase Kiosk' : 'Auto-Sleep (2m)'}
+                  </span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Panel State</span>
+                  <span className="text-xs font-bold font-mono text-emerald-400 mt-1">
+                    {telemetry?.oledSleeping ? 'Sleeping (Cold)' : 'Active / Rendering'}
+                  </span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Burn-in Guard</span>
+                  <span className="text-xs font-bold font-mono text-emerald-400 mt-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Enabled
+                  </span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Wake Triggers</span>
+                  <span className="text-xs font-bold font-mono text-zinc-300 mt-1">
+                    Buttons / Hazard / API
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[11px] font-mono text-zinc-400 bg-black/20 p-2.5 rounded-lg border border-white/[0.04] mt-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                <span>OLED panel enters deep power save after 2 minutes of idle time to prevent pixel burn-in. Wakes instantly on any physical button tap or remote action.</span>
+              </div>
             </div>
           </motion.div>
 

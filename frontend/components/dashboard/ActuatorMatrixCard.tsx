@@ -6,10 +6,10 @@
 import React from "react";
 import { useStore } from "@/lib/store";
 import { useSession } from "next-auth/react";
-import { ShieldAlert, Wrench, Timer, Droplet, Lock, LockOpen, OctagonAlert } from "lucide-react";
+import { ShieldAlert, Wrench, Timer, Droplet, Lock, LockOpen, OctagonAlert, Monitor } from "lucide-react";
 
 export function ActuatorMatrixCard() {
-  const { fsm, fsmCurrentState, sendActionCommand } = useStore();
+  const { fsm, fsmCurrentState, sendActionCommand, telemetry } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -137,6 +137,25 @@ export function ActuatorMatrixCard() {
             >
               {fsmCurrentState === 'MANUAL' ? <LockOpen className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
               {fsmCurrentState === 'MANUAL' ? 'Manual' : 'Auto'}
+            </button>
+          </div>
+
+          {/* OLED Showcase (Always-On) vs Burn-in Auto-Sleep Toggle */}
+          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface-container/60 border border-outline-variant/30 text-[10px]">
+            <div className="flex items-center gap-1.5">
+              <Monitor className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-satoshi text-on-surface-variant font-medium">OLED Display Shield</span>
+            </div>
+            <button
+              onClick={() => sendActionCommand(telemetry.oledAlwaysOn ? 'oled_auto_sleep' : 'oled_always_on')}
+              className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                telemetry.oledAlwaysOn
+                  ? 'bg-amber-500 text-black shadow-sm font-extrabold'
+                  : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20'
+              }`}
+              title={telemetry.oledAlwaysOn ? "Click to enable 2-min auto-sleep (prevents pixel burn-in)" : "Click to keep OLED lit continuously for showcase"}
+            >
+              {telemetry.oledAlwaysOn ? 'SHOWCASE: ALWAYS ON' : 'AUTO-SLEEP (2M)'}
             </button>
           </div>
 

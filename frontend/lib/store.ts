@@ -128,6 +128,8 @@ export const useStore = create<BioArcStore>((set, get) => ({
       rawDistanceCm: t.rawDistanceCm ?? t.rawDistanceCM ?? t.raw_distance_cm ?? state.telemetry.rawDistanceCm,
       devMode: t.devMode ?? t.dev_mode ?? state.telemetry.devMode,
       fanOn: t.relayFan ?? t.fanOn ?? t.relays?.fan ?? state.telemetry.fanOn,
+      oledAlwaysOn: t.oledAlwaysOn ?? t.oled_always_on ?? state.telemetry.oledAlwaysOn ?? false,
+      oledSleeping: t.oledSleeping ?? t.oled_sleeping ?? state.telemetry.oledSleeping ?? false,
     };
 
     const incomingState = t.state || state.fsmCurrentState;
@@ -186,6 +188,9 @@ export const useStore = create<BioArcStore>((set, get) => ({
         else if (action === 'dev_mode_off') set({ fsmCurrentState: 'IDLE', fsm: { ...currentFsm, mode: 'AUTONOMOUS', devMode: false } });
         else if (action === 'fan_on') set({ fsm: { ...currentFsm, exhaustFan: true }, telemetry: { ...get().telemetry, fanOn: true } });
         else if (action === 'fan_off') set({ fsm: { ...currentFsm, exhaustFan: false }, telemetry: { ...get().telemetry, fanOn: false } });
+        else if (action === 'oled_always_on') set({ telemetry: { ...get().telemetry, oledAlwaysOn: true, oledSleeping: false } });
+        else if (action === 'oled_auto_sleep') set({ telemetry: { ...get().telemetry, oledAlwaysOn: false } });
+        else if (action === 'oled_wake') set({ telemetry: { ...get().telemetry, oledSleeping: false } });
         else if (action === 'stop_all' || action === 'kill_all') set({
           fsm: {
             ...currentFsm,

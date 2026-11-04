@@ -55,6 +55,13 @@ public:
     void showToast(const char* msg, uint16_t durationMs = 1500);
     bool isOledConnected() const { return _oledDetected; }
 
+    // Burn-In Prevention & Showcase Kiosk Mode
+    void wakeScreen();
+    void setAlwaysOn(bool alwaysOn);
+    bool isAlwaysOn() const { return _alwaysOn; }
+    bool isScreenSleeping() const { return _screenSleeping; }
+    void setSleepTimeout(unsigned long ms) { _sleepTimeoutMs = ms; }
+
     // Renders the 128x64 display
     void update();
 
@@ -110,6 +117,12 @@ private:
     uint8_t _bubblePhase;
     bool _oledDetected;
     unsigned long _lastProbeTime;
+
+    // Sleep & Burn-In Protection
+    bool _screenSleeping;
+    bool _alwaysOn;
+    unsigned long _lastInteractionTime;
+    unsigned long _sleepTimeoutMs;
 
     // Screen Renderers
     void drawHeader(const char* title = nullptr);
