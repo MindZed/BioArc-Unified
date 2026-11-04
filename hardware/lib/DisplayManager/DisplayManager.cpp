@@ -18,7 +18,7 @@ DisplayManager::DisplayManager(uint8_t oled_addr, uint8_t unused)
     _toastUntil = 0;
 
     _distEmpty = 33;
-    _distFull = 8;
+    _distFull = 7;
 
     _state = "BOOT";
     _ip = "0.0.0.0";

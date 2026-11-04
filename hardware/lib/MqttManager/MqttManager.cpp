@@ -81,7 +81,7 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
                                    float greenRatio, float grRatio, float pseudoOD, 
                                    float vegIndex, float chlA, float growthRateMu, bool hasBaseline,
                                    bool photoperiodActive, uint8_t currentHr, bool storeThis,
-                                   bool devMode, int rawDist) {
+                                   bool devMode, int rawDist, int levelPct, int distEmpty, int distFull) {
     if (!_client.connected()) return; // Don't block or leak if disconnected
     
     JsonDocument doc;
@@ -91,7 +91,11 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
     doc["humidity"] = hum;
     doc["pressure"] = press;
     doc["level_cm"] = level;
+    doc["level_pct"] = levelPct;
+    doc["reservoir_pct"] = levelPct;
     doc["rawDistanceCM"] = rawDist > 0 ? rawDist : level;
+    doc["dist_empty"] = distEmpty;
+    doc["dist_full"] = distFull;
     doc["devMode"] = devMode;
     doc["fanOn"] = rFan;
     

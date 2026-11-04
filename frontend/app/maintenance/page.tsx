@@ -434,7 +434,7 @@ export default function MaintenancePage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 my-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-2">
                 <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
                   <span className="text-[10px] uppercase font-mono text-zinc-400">Raw Air Gap</span>
                   <span className="text-base font-bold font-mono text-cyan-400 mt-1">
@@ -447,7 +447,13 @@ export default function MaintenancePage() {
                     {(telemetry?.reservoirVolume ?? 0).toFixed(1)}%
                   </span>
                 </div>
-                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col col-span-2 sm:col-span-1">
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
+                  <span className="text-[10px] uppercase font-mono text-zinc-400">Calib Profile</span>
+                  <span className="text-xs font-bold font-mono text-zinc-300 mt-1">
+                    33cm &rarr; 7cm
+                  </span>
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-xl flex flex-col">
                   <span className="text-[10px] uppercase font-mono text-zinc-400">Sensor Status</span>
                   <span className="text-xs font-bold font-mono text-emerald-400 mt-1 flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Active
@@ -455,21 +461,34 @@ export default function MaintenancePage() {
                 </div>
               </div>
 
+              <div className="text-[11px] font-mono text-zinc-400 bg-black/20 p-2.5 rounded-lg border border-white/[0.04] mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0"></span>
+                <span>Inverted Overhead Geometry: Empty = 33 cm (0%), Full = 7 cm (100%). Usable liquid span = 26 cm.</span>
+              </div>
+
               {isAdmin && (
                 <div className="mt-3 pt-3 border-t border-white/[0.05] flex flex-wrap gap-2">
                   <button 
+                    onClick={() => sendActionCommand('calibrate_33_7')}
+                    className="flex-1 min-w-[180px] py-2 px-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl text-xs font-satoshi font-semibold text-cyan-300 hover:text-white transition-all text-center flex items-center justify-center gap-1.5"
+                    title="Instantly sets Empty=33cm (0%) and Full=7cm (100%)"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                    Apply Standard 33cm/7cm Calibration
+                  </button>
+                  <button 
                     onClick={() => sendActionCommand('set_dist_empty')}
-                    className="flex-1 min-w-[120px] py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-satoshi font-semibold text-amber-300 hover:text-white transition-all text-center"
+                    className="py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-satoshi font-semibold text-amber-300 hover:text-white transition-all text-center"
                     title="Calibrates the current distance as EMPTY (0% level)"
                   >
-                    Set As Empty (0%)
+                    Set Live as 0%
                   </button>
                   <button 
                     onClick={() => sendActionCommand('set_dist_full')}
-                    className="flex-1 min-w-[120px] py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-xs font-satoshi font-semibold text-emerald-300 hover:text-white transition-all text-center"
+                    className="py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-xs font-satoshi font-semibold text-emerald-300 hover:text-white transition-all text-center"
                     title="Calibrates the current distance as FULL (100% level)"
                   >
-                    Set As Full (100%)
+                    Set Live as 100%
                   </button>
                 </div>
               )}

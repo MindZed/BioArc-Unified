@@ -100,6 +100,15 @@ struct NetworkConfig {
     String mqttPass;
 } netConfig;
 
+int calcLevelPct(int dist) {
+    if (dist <= 0 || dist > 250) return 0;
+    if (config.distEmpty <= config.distFull) return 0;
+    if (dist >= config.distEmpty) return 0;
+    if (dist <= config.distFull) return 100;
+    int pct = ((config.distEmpty - dist) * 100) / (config.distEmpty - config.distFull);
+    return constrain(pct, 0, 100);
+}
+
 int getEffectiveDistFull() {
     return config.distEmpty - ((config.distEmpty - config.distFull) * config.fillPct / 100);
 }
@@ -115,7 +124,13 @@ void loadConfig() {
     config.enableFan = preferences.getBool("enFan", true);
     config.fillPct = preferences.getUChar("fillPct", 100);
     config.distEmpty = preferences.getInt("distEmpty", 33);
-    config.distFull = preferences.getInt("distFull", 8);
+    config.distFull = preferences.getInt("distFull", 7);
+    if (config.distEmpty <= config.distFull || config.distEmpty < 15 || config.distFull > 15 || config.distFull == 8) {
+        config.distEmpty = 33;
+        config.distFull = 7;
+        preferences.putInt("distEmpty", 33);
+        preferences.putInt("distFull", 7);
+    }
     config.chlCalibK = preferences.getFloat("chlCalibK", 850.0f);
     config.harvestOD = preferences.getFloat("harvestOD", 1.5f);
     config.crashDeltaOD = preferences.getFloat("crashDOD", 0.5f);
@@ -179,6 +194,7 @@ struct TelemetrySnapshot {
     float pressure;
     int distanceCM;
     int rawDistanceCM;
+    int waterLevelPct;
     bool intakeOn;
     bool outtakeOn;
     bool airOn;
@@ -426,8 +442,13 @@ String getTelemetryJSON() {
         doc["wTemp"] = sharedTelemetry.waterTemp;
         doc["aTemp"] = sharedTelemetry.airTemp;
         doc["hum"] = sharedTelemetry.humidity;
-        doc["level"] = sharedTelemetry.distanceCM;
+        doc["level"] = sharedTelemetry.waterLevelPct;
+        doc["levelPct"] = sharedTelemetry.waterLevelPct;
+        doc["level_pct"] = sharedTelemetry.waterLevelPct;
+        doc["level_cm"] = sharedTelemetry.distanceCM;
         doc["rawDistanceCM"] = sharedTelemetry.rawDistanceCM;
+        doc["distEmpty"] = config.distEmpty;
+        doc["distFull"] = config.distFull;
         doc["fanOn"] = sharedTelemetry.fanOn;
         doc["devMode"] = sharedTelemetry.devMode;
         doc["actuatorLight"] = sharedTelemetry.lightOn;
@@ -625,28 +646,64 @@ void Task_FSM_Control(void* pvParameters) {
                 snprintf(tBuf, sizeof(tBuf), "DS18B20 Re-initialized: %d device(s) found", waterTemp.getDeviceCount());
                 mqtt.publishLog("info", tBuf);
             }
+            else if (action == "calibrate_33_7" || action == "calibrate_default") {
+                config.distEmpty = 33;
+                config.distFull = 7;
+                saveConfig();
+                if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    sharedTelemetry.waterLevelPct = calcLevelPct(sharedTelemetry.distanceCM);
+                    xSemaphoreGive(xStateMutex);
+                }
+                mqtt.publishLog("info", "Level Calibrated: Empty=33cm (0%), Full=7cm (100%)");
+            }
+            else if (action.startsWith("calibrate") || action.startsWith("set_calibration")) {
+                int eIdx = action.indexOf("empty=");
+                int fIdx = action.indexOf("full=");
+                if (eIdx != -1) {
+                    int eVal = action.substring(eIdx + 6).toInt();
+                    if (eVal > 0) config.distEmpty = eVal;
+                }
+                if (fIdx != -1) {
+                    int fVal = action.substring(fIdx + 5).toInt();
+                    if (fVal > 0) config.distFull = fVal;
+                }
+                saveConfig();
+                if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    sharedTelemetry.waterLevelPct = calcLevelPct(sharedTelemetry.distanceCM);
+                    xSemaphoreGive(xStateMutex);
+                }
+                char cBuf[64];
+                snprintf(cBuf, sizeof(cBuf), "Level Calibrated: Empty=%dcm, Full=%dcm", config.distEmpty, config.distFull);
+                mqtt.publishLog("info", cBuf);
+            }
             else if (action == "set_dist_empty") {
                 int curD = 0;
                 if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     curD = sharedTelemetry.distanceCM;
-                    config.distEmpty = curD;
-                    saveConfig();
+                    if (curD > 0 && curD < 250) {
+                        config.distEmpty = curD;
+                        saveConfig();
+                        sharedTelemetry.waterLevelPct = calcLevelPct(sharedTelemetry.distanceCM);
+                    }
                     xSemaphoreGive(xStateMutex);
                 }
                 char lBuf[64];
-                snprintf(lBuf, sizeof(lBuf), "Calibrated Empty Distance: %d cm", curD);
+                snprintf(lBuf, sizeof(lBuf), "Calibrated Empty Distance: %d cm (0%%)", curD);
                 mqtt.publishLog("info", lBuf);
             }
             else if (action == "set_dist_full") {
                 int curD = 0;
                 if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     curD = sharedTelemetry.distanceCM;
-                    config.distFull = curD;
-                    saveConfig();
+                    if (curD > 0 && curD < 250) {
+                        config.distFull = curD;
+                        saveConfig();
+                        sharedTelemetry.waterLevelPct = calcLevelPct(sharedTelemetry.distanceCM);
+                    }
                     xSemaphoreGive(xStateMutex);
                 }
                 char lBuf[64];
-                snprintf(lBuf, sizeof(lBuf), "Calibrated Full Distance: %d cm", curD);
+                snprintf(lBuf, sizeof(lBuf), "Calibrated Full Distance: %d cm (100%%)", curD);
                 mqtt.publishLog("info", lBuf);
             }
             else if (action == "manual_mode_on") {
@@ -837,7 +894,7 @@ void Task_FSM_Control(void* pvParameters) {
                     // In Dev Mode, pause all autonomous schedules so manual bench toggles are honored
                     if (!devMode) {
                         // 1. Evaporation Refill Check (Daily at 1PM)
-                        if (config.enableAutoRefill && currentHr == 13 && currentMin == 0 && currentDist >= DIST_REFILL_TRIG) {
+                        if (config.enableAutoRefill && currentHr == 13 && currentMin == 0 && currentDist >= (getEffectiveDistFull() + DIST_REFILL_TRIG)) {
                             mqtt.publishLog("log", "Evaporation detected. Triggering refill.");
                             currentState = STATE_REFILL;
                             overshootActive = false;
@@ -982,6 +1039,8 @@ void Task_Sensors(void* pvParameters) {
         // 5. Publish to shared state
         if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             sharedTelemetry.distanceCM = waterLevel.getDistanceCM();
+            sharedTelemetry.rawDistanceCM = sharedTelemetry.distanceCM;
+            sharedTelemetry.waterLevelPct = calcLevelPct(sharedTelemetry.distanceCM);
             sharedTelemetry.waterTemp = waterTemp.getWaterTemp();
             sharedTelemetry.airTemp = envSensor.getAirTemp();
             sharedTelemetry.humidity = envSensor.getHumidity();
@@ -1211,7 +1270,7 @@ void Task_Network_Telemetry(void* pvParameters) {
                 snap.tcsR, snap.tcsG, snap.tcsB, snap.tcsC,
                 snap.greenRatio, snap.grRatio, snap.pseudoOD, snap.vegIndex, snap.chlA, snap.growthRateMu, snap.hasBaseline,
                 snap.isDaytime, snap.currentHr, storeThis,
-                snap.devMode, snap.rawDistanceCM
+                snap.devMode, snap.rawDistanceCM, snap.waterLevelPct, config.distEmpty, config.distFull
             );
         }
 
@@ -1275,7 +1334,7 @@ void Task_Dual_Display(void* pvParameters) {
 
         if (xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             displays.setSystemData(stateNames[snap.state], snap.ipStr, snap.wifiConnected, snap.mqttConnected, WiFi.RSSI(), ESP.getFreeHeap());
-            displays.setTelemetryData(snap.waterTemp, snap.airTemp, snap.humidity, snap.distanceCM, snap.timeStr);
+            displays.setTelemetryData(snap.waterTemp, snap.airTemp, snap.humidity, snap.waterLevelPct, snap.timeStr);
             displays.setDevData(snap.devMode, snap.rawDistanceCM, snap.fanOn);
             displays.setActuatorStates(snap.lightOn, snap.airOn, snap.intakeOn, snap.outtakeOn, snap.agitatorOn, snap.fanOn);
             displays.setCalibrationData(config.distEmpty, config.distFull);

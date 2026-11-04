@@ -146,6 +146,12 @@ void CaptivePortal::handleApiData() {
 void CaptivePortal::handleApiCommand() {
     if (_server.hasArg("action") && _commandCallback) {
         String action = _server.arg("action");
+        if (_server.hasArg("empty")) {
+            action += "&empty=" + _server.arg("empty");
+        }
+        if (_server.hasArg("full")) {
+            action += "&full=" + _server.arg("full");
+        }
         _commandCallback(action);
         _server.send(200, "text/plain", "OK");
     } else {

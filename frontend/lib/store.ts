@@ -107,8 +107,10 @@ export const useStore = create<BioArcStore>((set, get) => ({
       ambientTemp: t.airTemp ?? t.air_temp ?? state.telemetry.ambientTemp,
       humidity: t.humidity ?? state.telemetry.humidity,
       pressure: t.pressure ?? state.telemetry.pressure,
-      reservoirVolume: (t.levelCm !== undefined || t.level_cm !== undefined) 
-        ? Math.max(0, Math.min(100, ((34 - (t.levelCm ?? t.level_cm)) / 30) * 100)) 
+      reservoirVolume: (t.levelPct !== undefined || t.level_pct !== undefined || t.reservoir_pct !== undefined) 
+        ? Math.max(0, Math.min(100, Number(t.levelPct ?? t.level_pct ?? t.reservoir_pct)))
+        : (t.levelCm !== undefined || t.level_cm !== undefined || t.rawDistanceCm !== undefined) 
+        ? Math.max(0, Math.min(100, Math.round(((33 - (t.levelCm ?? t.level_cm ?? t.rawDistanceCm)) / 26) * 100))) 
         : state.telemetry.reservoirVolume,
       algaeGrowthRate: t.growthRateU ?? t.growth_rate_u ?? state.telemetry.algaeGrowthRate,
       predictedPh: t.predictedPh ?? t.predicted_ph ?? state.telemetry.predictedPh,

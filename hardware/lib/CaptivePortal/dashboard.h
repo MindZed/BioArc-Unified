@@ -53,8 +53,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
                 <div class="card-value"><span id="hum">--</span> <span style="font-size:12px;color:#71717a;">%</span></div>
             </div>
             <div class="card">
-                <div class="card-title">Level</div>
-                <div class="card-value"><span id="level">--</span> <span style="font-size:12px;color:#71717a;">cm</span></div>
+                <div class="card-title">Water Level</div>
+                <div class="card-value"><span id="level">--</span> <span style="font-size:12px;color:#71717a;">%</span> (<span id="rawDist" style="font-size:12px;color:#38bdf8;">--</span> <span style="font-size:10px;color:#71717a;">cm</span>)</div>
             </div>
             <div class="card">
                 <div class="card-title">TCS Color (RGB)</div>
@@ -82,6 +82,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         <button class="btn btn-primary" onclick="sendCommand('agitate')">Trigger Agitation</button>
         <button class="btn btn-primary" onclick="sendCommand('color_sample')">Test Color Sample (30s)</button>
         <button class="btn btn-primary" style="background:#059669; color:#fff;" onclick="sendCommand('calibrate_baseline')">Calibrate Baseline</button>
+        <button class="btn btn-primary" style="background:#0284c7; color:#fff;" onclick="sendCommand('calibrate_33_7')">Calibrate Level (33cm Empty / 7cm Full)</button>
         <button class="btn btn-primary" onclick="sendCommand('drain_all')">Drain Tank (Harvest)</button>
         <button class="btn btn-danger" onclick="sendCommand('emergency_stop')">EMERGENCY STOP</button>
         <button class="btn btn-primary" style="background:#3f3f46; color:#fff;" onclick="sendCommand('clear_hazard')">Clear Hazard State</button>
@@ -99,7 +100,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
                     document.getElementById('wTemp').innerText = data.wTemp;
                     document.getElementById('aTemp').innerText = data.aTemp;
                     document.getElementById('hum').innerText = data.hum;
-                    document.getElementById('level').innerText = data.level;
+                    document.getElementById('level').innerText = (data.levelPct !== undefined ? data.levelPct : data.level);
+                    let rD = (data.rawDistanceCM !== undefined ? data.rawDistanceCM : data.level_cm);
+                    if (document.getElementById('rawDist')) document.getElementById('rawDist').innerText = rD;
                     document.getElementById('tcsR').innerText = data.tcsR;
                     document.getElementById('tcsG').innerText = data.tcsG;
                     document.getElementById('tcsB').innerText = data.tcsB;
