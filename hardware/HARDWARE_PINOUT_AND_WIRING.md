@@ -17,37 +17,38 @@
 | **GPIO 19** | Ultrasonic Distance (`JSN-SR04T` / `NewPing`) | Digital | Input (`ECHO`) | 3.3V (5V tolerant divider) | Active-HIGH pulse | Measures echo return time. *If using 5V JSN-SR04T, use voltage divider to protect ESP32 3.3V pin!* |
 | **GPIO 33** | Media Intake Solenoid Valve (`Relay 1`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Doses fresh nutrient water / media. Controlled by `relays.setIntake()`. |
 | **GPIO 32** | Outtake Harvest Drain Valve (`Relay 3`) | Relay Driver | Output | 5V / 3.3V | Active-HIGH | Drains dense algae culture during harvest. Wired to single-channel module (HIGH=ON, LOW=OFF). Controlled by `relays.setOuttake()`. |
-| **GPIO 25** | Aeration Air Sparger Pump (`SSR 1`) | Solid State Relay | Output | 3.3V / 5V | Active-LOW | $CO_2$ / air oxygenation bubbling. Controlled by `relays.setAir()`. |
+| **GPIO 25** | Aeration Air Sparger Pump (`SSR 1`) | Solid State Relay | Output | 3.3V / 5V | Active-HIGH | $CO_2$ / air oxygenation bubbling. Controlled by `relays.setAir()`. |
 | **GPIO 26** | Mechanical Agitator Motor / Brush (`Relay 4`)| Relay Driver | Output | 5V / 3.3V | Active-LOW | Cell suspension stirring to prevent biofouling. Moved from Pin 27. Controlled by `relays.setAgitator()`. |
 | **GPIO 27** | Photoperiod Grow Light Array (`Relay 2`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | High-intensity LED lighting for photosynthesis. Moved from Pin 32. Controlled by `relays.setLight()`. |
 | **GPIO 23** | 12V Headspace Exhaust Fan (`Relay 5`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Evacuates heat (>34°C) & grow light heat. Controlled by `relays.setExhaustFan()`. |
-| **GPIO 13** | OLED Nav Button A / Touch Channel 4 | Digital / Touch | Input | 3.3V | Pull-Up / Touch | *Reserved for future OLED menu navigation.* |
-| **GPIO 14** | OLED Nav Button B / Touch Channel 6 | Digital / Touch | Input | 3.3V | Pull-Up / Touch | *Reserved for future OLED menu navigation.* |
+| **GPIO 13** | OLED Nav Button 1 (NAV / SELECT) | Digital | Input | 3.3V | Internal Pull-Up | Short press: Prev page / Step actuator. Long press: Save calib empty / toggle cycle. |
+| **GPIO 14** | OLED Action Button 2 (ACTION / TOGGLE)| Digital | Input | 3.3V | Internal Pull-Up | Short press: Toggle actuator / Jog. Long press: Toggle DEV MODE / Save calib full. |
 
 ---
 
 ## 2. Relay Board Configuration & Hardware Polarity (Confirmed)
 
 The physical relay setup on the bioreactor hardware consists of:
-1. **2x 2-Channel Relay Modules (Active-LOW)**:
-   - Due to a dead channel on one 2-channel module, these currently drive:
-     - **GPIO 33 (Intake Solenoid Valve)**: Active-LOW (`LOW` = Valve OPEN / `HIGH` = Valve CLOSED)
-     - **GPIO 26 (Outtake Drain Valve)**: Active-LOW (`LOW` = Valve OPEN / `HIGH` = Valve CLOSED)
-     - **GPIO 27 (Agitator Motor / Brush)**: Active-LOW (`LOW` = Motor ON / `HIGH` = Motor OFF)
-2. **1x Solid State Relay (SSR) (Active-LOW)**:
-   - **GPIO 25 (Aeration Air Sparger Pump)**: Active-LOW (`LOW` = Air ON / `HIGH` = Air OFF)
-3. **1x Single-Channel Relay Module (Active-HIGH)**:
-   - Replaced the dead channel on the original module; physically wired to the high-intensity illumination array:
-     - **GPIO 32 (Photoperiod Grow Light Array)**: Active-HIGH (`HIGH` = Lights ON / `LOW` = Lights OFF)
+1. **Multi-Channel Relay Modules (Active-LOW)**:
+   - **GPIO 33 (Intake Solenoid Valve)**: Active-LOW (`LOW` = Valve OPEN / `HIGH` = Valve CLOSED)
+   - **GPIO 27 (Grow Light Array)**: Active-LOW (`LOW` = Light ON / `HIGH` = Light OFF)
+   - **GPIO 26 (Agitator Motor / Brush)**: Active-LOW (`LOW` = Motor ON / `HIGH` = Motor OFF)
+   - **GPIO 23 (12V Chamber Exhaust Fan)**: Active-LOW (`LOW` = Fan ON / `HIGH` = Fan OFF)
+2. **1x Single-Channel Relay Module (Active-HIGH)**:
+   - **GPIO 32 (Harvest Drain Pump)**: Active-HIGH (`HIGH` = Pump ON / `LOW` = Pump OFF)
+3. **1x Solid State Relay (SSR) (Active-HIGH)**:
+   - **GPIO 25 (Aeration Air Sparger Pump)**: Active-HIGH (`HIGH` = SSR ON / `LOW` = SSR OFF)
 
 ### Software Polarity Mapping
-In `RelayManager::setRelay(uint8_t pin, bool turnOn)`:
+In `RelayManager::RelayManager(...)`:
 ```cpp
-if (pin == 32) {
-    digitalWrite(pin, turnOn ? HIGH : LOW); // GPIO 32 is Active-HIGH (Grow Lights)
-} else {
-    digitalWrite(pin, turnOn ? LOW : HIGH); // All other relays are Active-LOW
-}
+_lightActiveHigh = false;    // GPIO 27: Active-LOW
+_intakeActiveHigh = false;   // GPIO 33: Active-LOW
+_outtakeActiveHigh = true;   // GPIO 32: Active-HIGH (Single Channel Module)
+_airActiveHigh = true;       // GPIO 25: Active-HIGH (Solid State Relay)
+_agitatorActiveHigh = false; // GPIO 26: Active-LOW
+_fanActiveHigh = false;      // GPIO 23: Active-LOW
+```
 ```
 *Note: In the new FreeRTOS architecture, polarity flags are configurable in software per-channel so no hardware rewiring is ever needed if modules are swapped in the future.*
 

@@ -31,6 +31,8 @@ public:
     bool isAirOn() const { return _airOn; }
     bool isAgitatorOn() const { return _agitatorOn; }
     bool isExhaustFanOn() const { return _fanOn; }
+    bool isAirActiveHigh() const { return _airActiveHigh; }
+    void setAirActiveHigh(bool high) { _airActiveHigh = high; setRelay(_pinAir, _airOn); }
 
 private:
     uint8_t _pinLight, _pinIntake, _pinOuttake, _pinAir, _pinAgitator, _pinFan;

@@ -42,7 +42,7 @@
 
 #define RELAY_INTAKE 33     // Active-LOW (Intake Solenoid / Pump)
 #define RELAY_LIGHT 27      // Active-LOW (Grow Lights array on multi-channel relay)
-#define SSR1_AIR_PUMP 25    // Active-LOW (Aeration Sparger SSR)
+#define SSR1_AIR_PUMP 25    // Active-HIGH (Aeration Sparger Solid State Relay)
 #define RELAY_OUTTAKE 32    // Active-HIGH (Harvest Drain Pump on single-channel relay)
 #define RELAY_AGITATOR 26   // Active-LOW (Agitator Motor on multi-channel relay)
 #define RELAY_FAN 23        // Active-LOW (12V Chamber Exhaust Fan)
@@ -381,11 +381,12 @@ void runPreFlightDiagnostics() {
 
     // 4. Relay & SSR Polarity Verification
     Serial.println("[DIAG] Actuator Pin Configuration:");
-    Serial.printf("  - Grow Lights (Pin %d): Active-HIGH (Replacement Module)\n", RELAY_LIGHT);
+    Serial.printf("  - Grow Lights (Pin %d): Active-LOW\n", RELAY_LIGHT);
     Serial.printf("  - Intake Valve (Pin %d): Active-LOW\n", RELAY_INTAKE);
-    Serial.printf("  - Outtake Valve (Pin %d): Active-LOW\n", RELAY_OUTTAKE);
-    Serial.printf("  - Aeration SSR (Pin %d): Active-LOW\n", SSR1_AIR_PUMP);
+    Serial.printf("  - Outtake Valve (Pin %d): Active-HIGH (Single Channel Module)\n", RELAY_OUTTAKE);
+    Serial.printf("  - Aeration SSR (Pin %d): Active-HIGH (Solid State Relay)\n", SSR1_AIR_PUMP);
     Serial.printf("  - Agitator Motor (Pin %d): Active-LOW\n", RELAY_AGITATOR);
+    Serial.printf("  - Exhaust Fan (Pin %d): Active-LOW\n", RELAY_FAN);
     Serial.println("==================================================\n");
 }
 
@@ -400,6 +401,13 @@ String getTelemetryJSON() {
         doc["rawDistanceCM"] = sharedTelemetry.rawDistanceCM;
         doc["fanOn"] = sharedTelemetry.fanOn;
         doc["devMode"] = sharedTelemetry.devMode;
+        doc["actuatorLight"] = sharedTelemetry.lightOn;
+        doc["actuatorAir"] = sharedTelemetry.airOn;
+        doc["actuatorIntake"] = sharedTelemetry.intakeOn;
+        doc["actuatorOuttake"] = sharedTelemetry.outtakeOn;
+        doc["actuatorAgitator"] = sharedTelemetry.agitatorOn;
+        doc["actuatorFan"] = sharedTelemetry.fanOn;
+        doc["airActiveHigh"] = relays.isAirActiveHigh();
         doc["tcsR"] = sharedTelemetry.tcsR;
         doc["tcsG"] = sharedTelemetry.tcsG;
         doc["tcsB"] = sharedTelemetry.tcsB;
@@ -562,6 +570,21 @@ void Task_FSM_Control(void* pvParameters) {
                 pulseIntakeActive = false;
                 pulseOuttakeActive = false;
                 mqtt.publishLog("info", "All Relays Stopped via Hardware Control.");
+            }
+            else if (action == "air_polarity_high") {
+                relays.setAirActiveHigh(true);
+                mqtt.publishLog("info", "Air Pump SSR polarity set to Active-HIGH (HIGH=ON)");
+            }
+            else if (action == "air_polarity_low") {
+                relays.setAirActiveHigh(false);
+                mqtt.publishLog("info", "Air Pump SSR polarity set to Active-LOW (LOW=ON)");
+            }
+            else if (action == "air_polarity_toggle") {
+                bool cur = relays.isAirActiveHigh();
+                relays.setAirActiveHigh(!cur);
+                char pBuf[64];
+                snprintf(pBuf, sizeof(pBuf), "Air Pump SSR Polarity Toggled: %s", !cur ? "Active-HIGH" : "Active-LOW");
+                mqtt.publishLog("info", pBuf);
             }
             else if (action == "set_dist_empty") {
                 int curD = 0;
@@ -766,36 +789,39 @@ void Task_FSM_Control(void* pvParameters) {
                     break;
 
                 case STATE_IDLE:
-                    // 1. Evaporation Refill Check (Daily at 1PM)
-                    if (config.enableAutoRefill && currentHr == 13 && currentMin == 0 && currentDist >= DIST_REFILL_TRIG) {
-                        mqtt.publishLog("log", "Evaporation detected. Triggering refill.");
-                        currentState = STATE_REFILL;
-                        overshootActive = false;
-                        relays.setIntake(true);
-                        actionStartTime = millis();
-                    }
+                    // In Dev Mode, pause all autonomous schedules so manual bench toggles are honored
+                    if (!devMode) {
+                        // 1. Evaporation Refill Check (Daily at 1PM)
+                        if (config.enableAutoRefill && currentHr == 13 && currentMin == 0 && currentDist >= DIST_REFILL_TRIG) {
+                            mqtt.publishLog("log", "Evaporation detected. Triggering refill.");
+                            currentState = STATE_REFILL;
+                            overshootActive = false;
+                            relays.setIntake(true);
+                            actionStartTime = millis();
+                        }
 
-                    // 2. Air Pump Schedule (5 min ON, 25 min OFF during daytime)
-                    if (config.enableAir && relays.isLightOn()) {
-                        if ((currentMin >= 25 && currentMin < 30) || (currentMin >= 55 && currentMin < 60)) {
-                            relays.setAir(true);
+                        // 2. Air Pump Schedule (5 min ON, 25 min OFF during daytime)
+                        if (config.enableAir && relays.isLightOn()) {
+                            if ((currentMin >= 25 && currentMin < 30) || (currentMin >= 55 && currentMin < 60)) {
+                                relays.setAir(true);
+                            } else {
+                                relays.setAir(false);
+                            }
                         } else {
                             relays.setAir(false);
                         }
-                    } else {
-                        relays.setAir(false);
-                    }
 
-                    // 3. Agitation Schedule (Every 4 hours during day cycle)
-                    if (config.enableAgitator && isDaytime) {
-                        bool triggerAgi = (currentHr % 4 == 0 && currentMin == 5);
-                        if (triggerAgi && (currentMin != lastAgitationMin || currentHr != lastAgitationHour)) {
-                            lastAgitationHour = currentHr;
-                            lastAgitationMin = currentMin;
-                            currentState = STATE_AGITATING;
-                            relays.setAgitator(true);
-                            actionStartTime = millis();
-                            mqtt.publishLog("log", "Scheduled 4-Hour Agitation & Color Sample started.");
+                        // 3. Agitation Schedule (Every 4 hours during day cycle)
+                        if (config.enableAgitator && isDaytime) {
+                            bool triggerAgi = (currentHr % 4 == 0 && currentMin == 5);
+                            if (triggerAgi && (currentMin != lastAgitationMin || currentHr != lastAgitationHour)) {
+                                lastAgitationHour = currentHr;
+                                lastAgitationMin = currentMin;
+                                currentState = STATE_AGITATING;
+                                relays.setAgitator(true);
+                                actionStartTime = millis();
+                                mqtt.publishLog("log", "Scheduled 4-Hour Agitation & Color Sample started.");
+                            }
                         }
                     }
                     break;

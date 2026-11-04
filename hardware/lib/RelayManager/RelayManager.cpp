@@ -12,12 +12,13 @@ RelayManager::RelayManager(uint8_t pinLight, uint8_t pinIntake, uint8_t pinOutta
 
     // Hardware Relay Polarities:
     // Pin 32 (Harvest Pump) is on the single-channel replacement module (Active-HIGH)
+    // Pin 25 (Aeration Air Sparger) is on the Solid State Relay (Active-HIGH)
     // Pin 27 (Grow Lights) is on the multi-channel relay module (Active-LOW)
-    // All other relay channels (Pins 33, 25, 26, 23) are Active-LOW
+    // All other relay channels (Pins 33, 26, 23) are Active-LOW
     _lightActiveHigh = false;
     _intakeActiveHigh = false;
     _outtakeActiveHigh = true;
-    _airActiveHigh = false;
+    _airActiveHigh = true;
     _agitatorActiveHigh = false;
     _fanActiveHigh = false;
 }

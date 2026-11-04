@@ -344,11 +344,11 @@ void DisplayManager::drawActuatorsView() {
         uint8_t jogSec;
     } tiles[6] = {
         {"LIGHTS", _lightOn, 0},
-        {"AIR PUMP", _airOn, 0},
+        {"AIR", _airOn, 0},
         {"INLET", _intakeOn, _intakeJogSec},
         {"OUTLET", _outtakeOn, _outtakeJogSec},
-        {"AGITATOR", _agitatorOn, 0},
-        {"EXH FAN", _fanOn, 0}
+        {"AGIT", _agitatorOn, 0},
+        {"FAN", _fanOn, 0}
     };
 
     int colX[2] = {2, 65};
