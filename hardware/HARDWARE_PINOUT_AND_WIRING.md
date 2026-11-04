@@ -17,7 +17,7 @@
 | **GPIO 19** | Ultrasonic Distance (`JSN-SR04T` / `NewPing`) | Digital | Input (`ECHO`) | 3.3V (5V tolerant divider) | Active-HIGH pulse | Measures echo return time. *If using 5V JSN-SR04T, use voltage divider to protect ESP32 3.3V pin!* |
 | **GPIO 33** | Media Intake Solenoid Valve (`Relay 1`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Doses fresh nutrient water / media. Controlled by `relays.setIntake()`. |
 | **GPIO 32** | Outtake Harvest Drain Valve (`Relay 3`) | Relay Driver | Output | 5V / 3.3V | Active-HIGH | Drains dense algae culture during harvest. Wired to single-channel module (HIGH=ON, LOW=OFF). Controlled by `relays.setOuttake()`. |
-| **GPIO 25** | Aeration Air Sparger Pump (`SSR 1`) | Solid State Relay | Output | 3.3V / 5V | Active-HIGH | $CO_2$ / air oxygenation bubbling. Controlled by `relays.setAir()`. |
+| **GPIO 25** | Aeration Air Sparger Pump (`SSR 1`) | Solid State Relay | Output | 3.3V / 5V | Active-LOW | $CO_2$ / air oxygenation bubbling. Controlled by `relays.setAir()`. |
 | **GPIO 26** | Mechanical Agitator Motor / Brush (`Relay 4`)| Relay Driver | Output | 5V / 3.3V | Active-LOW | Cell suspension stirring to prevent biofouling. Moved from Pin 27. Controlled by `relays.setAgitator()`. |
 | **GPIO 27** | Photoperiod Grow Light Array (`Relay 2`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | High-intensity LED lighting for photosynthesis. Moved from Pin 32. Controlled by `relays.setLight()`. |
 | **GPIO 23** | 12V Headspace Exhaust Fan (`Relay 5`) | Relay Driver | Output | 5V / 3.3V | Active-LOW | Evacuates heat (>34°C) & grow light heat. Controlled by `relays.setExhaustFan()`. |
@@ -36,8 +36,8 @@ The physical relay setup on the bioreactor hardware consists of:
    - **GPIO 23 (12V Chamber Exhaust Fan)**: Active-LOW (`LOW` = Fan ON / `HIGH` = Fan OFF)
 2. **1x Single-Channel Relay Module (Active-HIGH)**:
    - **GPIO 32 (Harvest Drain Pump)**: Active-HIGH (`HIGH` = Pump ON / `LOW` = Pump OFF)
-3. **1x Solid State Relay (SSR) (Active-HIGH)**:
-   - **GPIO 25 (Aeration Air Sparger Pump)**: Active-HIGH (`HIGH` = SSR ON / `LOW` = SSR OFF)
+3. **1x Solid State Relay (SSR) (Active-LOW)**:
+   - **GPIO 25 (Aeration Air Sparger Pump)**: Active-LOW (`LOW` = SSR ON / `HIGH` = SSR OFF)
 
 ### Software Polarity Mapping
 In `RelayManager::RelayManager(...)`:
@@ -45,7 +45,7 @@ In `RelayManager::RelayManager(...)`:
 _lightActiveHigh = false;    // GPIO 27: Active-LOW
 _intakeActiveHigh = false;   // GPIO 33: Active-LOW
 _outtakeActiveHigh = true;   // GPIO 32: Active-HIGH (Single Channel Module)
-_airActiveHigh = true;       // GPIO 25: Active-HIGH (Solid State Relay)
+_airActiveHigh = false;      // GPIO 25: Active-LOW (Solid State Relay)
 _agitatorActiveHigh = false; // GPIO 26: Active-LOW
 _fanActiveHigh = false;      // GPIO 23: Active-LOW
 ```

@@ -42,7 +42,7 @@
 
 #define RELAY_INTAKE 33     // Active-LOW (Intake Solenoid / Pump)
 #define RELAY_LIGHT 27      // Active-LOW (Grow Lights array on multi-channel relay)
-#define SSR1_AIR_PUMP 25    // Active-HIGH (Aeration Sparger Solid State Relay)
+#define SSR1_AIR_PUMP 25    // Active-LOW (Aeration Sparger SSR)
 #define RELAY_OUTTAKE 32    // Active-HIGH (Harvest Drain Pump on single-channel relay)
 #define RELAY_AGITATOR 26   // Active-LOW (Agitator Motor on multi-channel relay)
 #define RELAY_FAN 23        // Active-LOW (12V Chamber Exhaust Fan)
@@ -384,7 +384,7 @@ void runPreFlightDiagnostics() {
     Serial.printf("  - Grow Lights (Pin %d): Active-LOW\n", RELAY_LIGHT);
     Serial.printf("  - Intake Valve (Pin %d): Active-LOW\n", RELAY_INTAKE);
     Serial.printf("  - Outtake Valve (Pin %d): Active-HIGH (Single Channel Module)\n", RELAY_OUTTAKE);
-    Serial.printf("  - Aeration SSR (Pin %d): Active-HIGH (Solid State Relay)\n", SSR1_AIR_PUMP);
+    Serial.printf("  - Aeration SSR (Pin %d): Active-LOW\n", SSR1_AIR_PUMP);
     Serial.printf("  - Agitator Motor (Pin %d): Active-LOW\n", RELAY_AGITATOR);
     Serial.printf("  - Exhaust Fan (Pin %d): Active-LOW\n", RELAY_FAN);
     Serial.println("==================================================\n");
