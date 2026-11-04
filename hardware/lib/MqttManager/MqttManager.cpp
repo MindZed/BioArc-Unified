@@ -76,11 +76,12 @@ void MqttManager::update() {
 }
 
 void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, float hum, float press, int level, 
-                                   bool rIntake, bool rOuttake, bool rAir, bool rLight, bool rAgitator,
+                                   bool rIntake, bool rOuttake, bool rAir, bool rLight, bool rAgitator, bool rFan,
                                    uint16_t tcsR, uint16_t tcsG, uint16_t tcsB, uint16_t tcsC, 
                                    float greenRatio, float grRatio, float pseudoOD, 
                                    float vegIndex, float chlA, float growthRateMu, bool hasBaseline,
-                                   bool photoperiodActive, uint8_t currentHr, bool storeThis) {
+                                   bool photoperiodActive, uint8_t currentHr, bool storeThis,
+                                   bool devMode, int rawDist) {
     if (!_client.connected()) return; // Don't block or leak if disconnected
     
     JsonDocument doc;
@@ -90,6 +91,9 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
     doc["humidity"] = hum;
     doc["pressure"] = press;
     doc["level_cm"] = level;
+    doc["rawDistanceCM"] = rawDist > 0 ? rawDist : level;
+    doc["devMode"] = devMode;
+    doc["fanOn"] = rFan;
     
     // ML Prediction Expected Format
     doc["Water_Temp_C"] = wTemp;
@@ -99,6 +103,7 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
     doc["TCS34725_C"] = tcsC;
     doc["Photoperiod_Active"] = photoperiodActive ? 1 : 0;
     doc["Actuator_AirPump"] = rAir ? 1 : 0;
+    doc["Actuator_Fan"] = rFan ? 1 : 0;
     doc["Hour_of_Day"] = currentHr;
     
     // Computed biomass & optical metrics
@@ -119,6 +124,7 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
     relays["air"] = rAir;
     relays["light"] = rLight;
     relays["agitator"] = rAgitator;
+    relays["fan"] = rFan;
     
     char buffer[1024];
     serializeJson(doc, buffer);

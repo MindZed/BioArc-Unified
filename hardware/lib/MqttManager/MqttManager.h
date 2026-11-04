@@ -23,11 +23,12 @@ public:
     
     // Publishers
     void publishTelemetry(const char* state, float wTemp, float aTemp, float hum, float press, int level, 
-                          bool rIntake, bool rOuttake, bool rAir, bool rLight, bool rAgitator,
+                          bool rIntake, bool rOuttake, bool rAir, bool rLight, bool rAgitator, bool rFan,
                           uint16_t tcsR, uint16_t tcsG, uint16_t tcsB, uint16_t tcsC, 
                           float greenRatio, float grRatio, float pseudoOD, 
                           float vegIndex, float chlA, float growthRateMu, bool hasBaseline,
-                          bool photoperiodActive, uint8_t currentHr, bool storeThis);
+                          bool photoperiodActive, uint8_t currentHr, bool storeThis,
+                          bool devMode = false, int rawDist = 0);
     void publishLog(const char* level, const char* msg);
 
 private:

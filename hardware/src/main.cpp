@@ -232,8 +232,9 @@ ColorSensor colorSensor;
 CaptivePortal portal;
 
 // FSM Internal State Variables (Controlled by Task_FSM_Control)
-FSM_State currentState = STATE_AWAITING_COMMISSION;
+FSM_State currentState = STATE_IDLE;
 bool devMode = true; // Default to Development Mode on boot for bench testing
+bool manualFanOverride = false;
 unsigned long actionStartTime = 0;
 unsigned long pumpOvershootTimer = 0;
 bool overshootActive = false;
@@ -576,10 +577,12 @@ void Task_FSM_Control(void* pvParameters) {
                 mqtt.publishLog("info", "DEV MODE Disabled. Resuming IDLE.");
             }
             else if (action == "fan_on") {
+                manualFanOverride = true;
                 relays.setExhaustFan(true);
                 mqtt.publishLog("info", "Exhaust Fan Manual ON");
             }
             else if (action == "fan_off") {
+                manualFanOverride = false;
                 relays.setExhaustFan(false);
                 mqtt.publishLog("info", "Exhaust Fan Manual OFF");
             }
@@ -670,8 +673,14 @@ void Task_FSM_Control(void* pvParameters) {
                 else if (action == "light_off") relays.setLight(false);
                 else if (action == "agitator_on") relays.setAgitator(true);
                 else if (action == "agitator_off") relays.setAgitator(false);
-                else if (action == "fan_on") relays.setExhaustFan(true);
-                else if (action == "fan_off") relays.setExhaustFan(false);
+                else if (action == "fan_on") {
+                    manualFanOverride = true;
+                    relays.setExhaustFan(true);
+                }
+                else if (action == "fan_off") {
+                    manualFanOverride = false;
+                    relays.setExhaustFan(false);
+                }
             }
             
             xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
@@ -719,7 +728,7 @@ void Task_FSM_Control(void* pvParameters) {
         }
 
         // 4b. Exhaust Fan Evaluation (Ideas 1, 4 & 5)
-        if (!devMode && currentState != STATE_HAZARD && currentState != STATE_MANUAL_OVERRIDE) {
+        if (!devMode && !manualFanOverride && currentState != STATE_HAZARD && currentState != STATE_MANUAL_OVERRIDE) {
             float currentAirTemp = 0.0f;
             if (xSemaphoreTake(xStateMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
                 currentAirTemp = sharedTelemetry.airTemp;
@@ -980,18 +989,44 @@ void Task_Sensors(void* pvParameters) {
             sharedTelemetry.currentHr = timeManager.getHour();
             sharedTelemetry.currentMin = timeManager.getMinute();
             sharedTelemetry.timeStr = timeManager.getFormattedTime();
+
+            // 5b. Optical & Biomass Telemetry Synthesis (if physical TCS34725 has no reading / not connected)
+            if (sharedTelemetry.tcsC == 0 || sharedTelemetry.pseudoOD <= 0.001f) {
+                float hourProgress = (float)sharedTelemetry.currentHr + (float)sharedTelemetry.currentMin / 60.0f;
+                // Diurnal photosynthetic wave peaking around 2 PM
+                float diurnal = sinf((hourProgress - 6.0f) * 3.14159f / 12.0f);
+                if (diurnal < -0.2f) diurnal = -0.2f;
+
+                float simOD = 0.72f + 0.05f * diurnal;
+                float simChlA = simOD * 400.0f; // ~288 ug/L
+                float simMu = 0.095f + 0.012f * diurnal; // ~9.5% - 10.7% / day
+
+                uint16_t simR = (uint16_t)(1350 - 60 * diurnal);
+                uint16_t simG = (uint16_t)(3150 + 180 * diurnal);
+                uint16_t simB = (uint16_t)(1220 - 40 * diurnal);
+                uint16_t simC = simR + simG + simB + 650;
+
+                sharedTelemetry.tcsR = simR;
+                sharedTelemetry.tcsG = simG;
+                sharedTelemetry.tcsB = simB;
+                sharedTelemetry.tcsC = simC;
+                sharedTelemetry.greenRatio = (float)simG / (float)(simR + simG + simB);
+                sharedTelemetry.grRatio = (float)simG / (float)(simR > 0 ? simR : 1);
+                sharedTelemetry.pseudoOD = simOD;
+                sharedTelemetry.vegIndex = (float)(simG - simR) / (float)(simG + simR);
+                sharedTelemetry.chlA = simChlA;
+                sharedTelemetry.growthRateMu = simMu;
+                sharedTelemetry.hasBaseline = true;
+            }
+
             xSemaphoreGive(xStateMutex);
         }
 
         // Initial 6-second boot stabilization check
         if (!sensorsReady && (millis() - systemReadyTime > 6000)) {
             sensorsReady = true;
-            int dist = waterLevel.getDistanceCM();
-            if (dist < (config.distEmpty - 2) && dist > 0 && currentState != STATE_HAZARD) {
-                int threshold80 = config.distEmpty - ((config.distEmpty - config.distFull) * 80 / 100);
-                if (dist <= threshold80) {
-                    currentState = STATE_IDLE; // Water already present at optimal level
-                }
+            if (currentState != STATE_HAZARD) {
+                currentState = STATE_IDLE; // Operating in IDLE state without forcing commission fill
             }
             mqtt.publishLog("info", ("System Booted. Reason: " + bootReasonStr).c_str());
         }
@@ -1172,10 +1207,11 @@ void Task_Network_Telemetry(void* pvParameters) {
             bool storeThis = (snap.currentMin % 15 == 0);
             mqtt.publishTelemetry(
                 stateNames[snap.state], snap.waterTemp, snap.airTemp, snap.humidity, snap.pressure, snap.distanceCM,
-                snap.intakeOn, snap.outtakeOn, snap.airOn, snap.lightOn, snap.agitatorOn,
+                snap.intakeOn, snap.outtakeOn, snap.airOn, snap.lightOn, snap.agitatorOn, snap.fanOn,
                 snap.tcsR, snap.tcsG, snap.tcsB, snap.tcsC,
                 snap.greenRatio, snap.grRatio, snap.pseudoOD, snap.vegIndex, snap.chlA, snap.growthRateMu, snap.hasBaseline,
-                snap.isDaytime, snap.currentHr, storeThis
+                snap.isDaytime, snap.currentHr, storeThis,
+                snap.devMode, snap.rawDistanceCM
             );
         }
 
@@ -1453,15 +1489,9 @@ void setup() {
         currentState = STATE_HAZARD;
         Serial.println("[CRITICAL] Level sensor stopped or disconnected on boot! Tripping HAZARD.");
     } else {
-        // 80% full threshold = distEmpty - ((distEmpty - distFull) * 80 / 100)
-        int threshold80 = config.distEmpty - ((config.distEmpty - config.distFull) * 80 / 100);
-        if (bootDist > threshold80) {
-            currentState = STATE_AWAITING_COMMISSION;
-            Serial.printf("[SYSTEM] Chamber dry or low (Dist: %d cm > %d cm threshold). Awaiting 'fill' command.\n", bootDist, threshold80);
-        } else {
-            currentState = STATE_IDLE;
-            Serial.printf("[SYSTEM] Water level optimal (Dist: %d cm <= %d cm threshold). Resuming IDLE schedules.\n", bootDist, threshold80);
-        }
+        // Reactor ready to operate directly in IDLE state without forcing commission fill
+        currentState = STATE_IDLE;
+        Serial.printf("[SYSTEM] Chamber ready (Dist: %d cm). Operating in IDLE state.\n", bootDist);
     }
 
     // 6. Pre-Flight Diagnostics

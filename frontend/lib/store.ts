@@ -182,8 +182,8 @@ export const useStore = create<BioArcStore>((set, get) => ({
         else if (action === 'agitator_off') set({ fsm: { ...currentFsm, agitator: false } });
         else if (action === 'dev_mode_on') set({ fsmCurrentState: 'DEV', fsm: { ...currentFsm, mode: 'MANUAL', devMode: true } });
         else if (action === 'dev_mode_off') set({ fsmCurrentState: 'IDLE', fsm: { ...currentFsm, mode: 'AUTONOMOUS', devMode: false } });
-        else if (action === 'fan_on') set({ fsm: { ...currentFsm, exhaustFan: true } });
-        else if (action === 'fan_off') set({ fsm: { ...currentFsm, exhaustFan: false } });
+        else if (action === 'fan_on') set({ fsm: { ...currentFsm, exhaustFan: true }, telemetry: { ...get().telemetry, fanOn: true } });
+        else if (action === 'fan_off') set({ fsm: { ...currentFsm, exhaustFan: false }, telemetry: { ...get().telemetry, fanOn: false } });
         else if (action === 'stop_all' || action === 'kill_all') set({
           fsm: {
             ...currentFsm,
