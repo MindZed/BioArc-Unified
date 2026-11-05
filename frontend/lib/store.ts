@@ -144,6 +144,9 @@ export const useStore = create<BioArcStore>((set, get) => ({
       fanOn: t.relayFan ?? t.fanOn ?? t.relays?.fan ?? state.telemetry.fanOn,
       oledAlwaysOn: t.oledAlwaysOn ?? t.oled_always_on ?? state.telemetry.oledAlwaysOn ?? false,
       oledSleeping: t.oledSleeping ?? t.oled_sleeping ?? state.telemetry.oledSleeping ?? false,
+      demoMode: t.demoMode ?? t.demo_mode ?? (t.state === 'DEMO' ? true : (state.telemetry.demoMode ?? false)),
+      demoStep: t.demoStep ?? t.demo_step ?? state.telemetry.demoStep ?? 0,
+      demoPhase: t.demoPhase ?? t.demo_phase ?? state.telemetry.demoPhase ?? '',
     };
 
     const incomingState = t.state || state.fsmCurrentState;
@@ -205,17 +208,46 @@ export const useStore = create<BioArcStore>((set, get) => ({
         else if (action === 'oled_always_on') set({ telemetry: { ...get().telemetry, oledAlwaysOn: true, oledSleeping: false } });
         else if (action === 'oled_auto_sleep') set({ telemetry: { ...get().telemetry, oledAlwaysOn: false } });
         else if (action === 'oled_wake') set({ telemetry: { ...get().telemetry, oledSleeping: false } });
-        else if (action === 'stop_all' || action === 'kill_all') set({
-          fsm: {
-            ...currentFsm,
-            inletPump: false,
-            outletPump: false,
-            airCompressor: false,
-            ledPanels: false,
-            agitator: false,
-            exhaustFan: false
-          }
-        });
+        else if (action === 'demo_cycle') {
+          set({
+            fsmCurrentState: 'DEMO',
+            telemetry: {
+              ...get().telemetry,
+              demoMode: true,
+              demoStep: 1,
+              demoPhase: 'Sunlight & Air'
+            },
+            fsm: {
+              ...currentFsm,
+              ledPanels: true,
+              airCompressor: true,
+              inletPump: false,
+              outletPump: false,
+              agitator: false,
+              exhaustFan: false
+            }
+          });
+        }
+        else if (action === 'stop_all' || action === 'kill_all' || action === 'demo_stop' || action === 'demo_cancel') {
+          set({
+            fsmCurrentState: 'IDLE',
+            telemetry: {
+              ...get().telemetry,
+              demoMode: false,
+              demoStep: 0,
+              demoPhase: 'IDLE'
+            },
+            fsm: {
+              ...currentFsm,
+              inletPump: false,
+              outletPump: false,
+              airCompressor: false,
+              ledPanels: false,
+              agitator: false,
+              exhaustFan: false
+            }
+          });
+        }
 
         return true;
       } else {

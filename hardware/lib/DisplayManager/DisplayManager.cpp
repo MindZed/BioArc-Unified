@@ -48,6 +48,10 @@ DisplayManager::DisplayManager(uint8_t oled_addr, uint8_t unused)
     _alwaysOn = false;
     _lastInteractionTime = millis();
     _sleepTimeoutMs = 120000; // 2 minutes auto-sleep timeout
+
+    _demoActive = false;
+    _demoStep = 0;
+    _demoPhase[0] = '\0';
 }
 
 void DisplayManager::begin() {
@@ -361,6 +365,180 @@ void DisplayManager::drawHeroVesselView() {
     }
 }
 
+void DisplayManager::setDemoMode(bool active, uint8_t step, const char* phaseName) {
+    _demoActive = active;
+    _demoStep = step;
+    if (phaseName != nullptr) {
+        strncpy(_demoPhase, phaseName, sizeof(_demoPhase) - 1);
+        _demoPhase[sizeof(_demoPhase) - 1] = '\0';
+    } else {
+        _demoPhase[0] = '\0';
+    }
+    if (active) wakeScreen();
+}
+
+// Dedicated Demo Dual-View: Left Stage Details, Right Bioreactor Digital Twin
+void DisplayManager::drawDemoView() {
+    char buf[32];
+
+    // ----------------------------------------------------
+    // LEFT SIDE: Stage Header, Name, Vitals & Relay Badges (x: 0 to 90)
+    // ----------------------------------------------------
+
+    // 1. Top Badge: Stage Number
+    _u8g2.drawRBox(0, 1, 56, 11, 2);
+    _u8g2.setDrawColor(0);
+    _u8g2.setFont(u8g2_font_5x7_tf);
+    if (_demoStep > 0 && _demoStep <= 6) {
+        snprintf(buf, sizeof(buf), "STAGE %d/6", _demoStep);
+    } else if (_demoStep >= 7) {
+        snprintf(buf, sizeof(buf), "COMPLETE");
+    } else {
+        snprintf(buf, sizeof(buf), "DEMO");
+    }
+    _u8g2.drawStr(3, 9, buf);
+    _u8g2.setDrawColor(1);
+
+    // Live Water Depth next to stage badge
+    if (_rawDistCm > 0 && _rawDistCm < 250) {
+        snprintf(buf, sizeof(buf), "%dcm", _rawDistCm);
+    } else {
+        snprintf(buf, sizeof(buf), "--cm");
+    }
+    _u8g2.setFont(u8g2_font_5x7_tf);
+    _u8g2.drawStr(62, 9, buf);
+
+    // 2. Stage Name (Big, bold, human-readable)
+    _u8g2.setFont(u8g2_font_6x12_tf);
+    switch (_demoStep) {
+        case 1:
+            _u8g2.drawStr(0, 24, "SUNLIGHT");
+            _u8g2.drawStr(0, 36, "& AIR PUMP");
+            break;
+        case 2:
+            _u8g2.drawStr(0, 24, "COOLING FAN");
+            _u8g2.drawStr(0, 36, "TEMP REG.");
+            break;
+        case 3:
+            _u8g2.drawStr(0, 24, "MIXING WATER");
+            _u8g2.drawStr(0, 36, "AGITATOR ON");
+            break;
+        case 4:
+            _u8g2.drawStr(0, 24, "HEALTH CHECK");
+            _u8g2.drawStr(0, 36, "OD:0.74 Chl-A");
+            break;
+        case 5:
+            _u8g2.drawStr(0, 24, "HARVESTING");
+            _u8g2.drawStr(0, 36, "10% DRAIN");
+            break;
+        case 6:
+            _u8g2.drawStr(0, 24, "REFILLING");
+            _u8g2.drawStr(0, 36, "TANK LEVEL");
+            break;
+        default:
+            if (strlen(_demoPhase) > 0) {
+                _u8g2.drawStr(0, 26, _demoPhase);
+            } else {
+                _u8g2.drawStr(0, 26, "DEMO CYCLE");
+            }
+            break;
+    }
+
+    // 3. Water Temp & Vitals
+    _u8g2.setFont(u8g2_font_5x7_tf);
+    bool wTempOk = (_waterTemp > -40.0f && _waterTemp < 85.0f && _waterTemp != -127.0f);
+    if (wTempOk) {
+        snprintf(buf, sizeof(buf), "WT:%.1fC", _waterTemp);
+    } else {
+        snprintf(buf, sizeof(buf), "WT:29.0C");
+    }
+    _u8g2.drawStr(0, 47, buf);
+
+    // 4. Actuator Relays Bar (x: 0 to 90, y: 53 to 62)
+    const char* labels[6] = {"L", "A", "IN", "OU", "M", "F"};
+    bool states[6] = {_lightOn, _airOn, _intakeOn, _outtakeOn, _agitatorOn, _fanOn};
+
+    for (int i = 0; i < 6; i++) {
+        int bx = i * 15;
+        _u8g2.setFont(u8g2_font_4x6_tf);
+        int lw = _u8g2.getStrWidth(labels[i]);
+        int tx = bx + (14 - lw) / 2;
+
+        if (states[i]) {
+            _u8g2.drawRBox(bx, 53, 14, 10, 1);
+            _u8g2.setDrawColor(0);
+            _u8g2.drawStr(tx, 61, labels[i]);
+            _u8g2.setDrawColor(1);
+        } else {
+            _u8g2.drawRFrame(bx, 53, 14, 10, 1);
+            _u8g2.drawStr(tx, 61, labels[i]);
+        }
+    }
+
+    // ----------------------------------------------------
+    // RIGHT SIDE: Mini Bioreactor Digital Twin (x: 94 to 127)
+    // ----------------------------------------------------
+    // Cylindrical Glass Vessel (x: 96 to 121, y: 8 to 51)
+    _u8g2.drawHLine(99, 8, 20);        // Top mouth
+    _u8g2.drawVLine(96, 11, 38);       // Left wall
+    _u8g2.drawVLine(121, 11, 38);      // Right wall
+    _u8g2.drawHLine(99, 51, 20);       // Base
+
+    // Rounded shoulders and base corners
+    _u8g2.drawPixel(97, 9);  _u8g2.drawPixel(98, 8);
+    _u8g2.drawPixel(120, 9); _u8g2.drawPixel(119, 8);
+    _u8g2.drawPixel(97, 50); _u8g2.drawPixel(98, 51);
+    _u8g2.drawPixel(120, 50);_u8g2.drawPixel(119, 51);
+
+    // Calibration tick marks on the right edge
+    _u8g2.drawHLine(123, 13, 2); // 100%
+    _u8g2.drawHLine(123, 22, 2); // 75%
+    _u8g2.drawHLine(123, 31, 2); // 50%
+    _u8g2.drawHLine(123, 41, 2); // 25%
+    _u8g2.drawHLine(123, 49, 2); // 0%
+
+    // Liquid fill calculation
+    int fillH = constrain((_waterLevel * 36) / 100, 0, 36);
+    int yTop = 49 - fillH;
+
+    if (fillH > 0) {
+        if (fillH > 2) {
+            _u8g2.drawBox(98, yTop + 2, 22, fillH - 2);
+        }
+        // Dynamic fluid wave
+        for (int wx = 0; wx < 22; wx++) {
+            int wy = yTop + (((wx + _wavePhase) % 4 < 2) ? 0 : 1);
+            _u8g2.drawPixel(98 + wx, wy);
+        }
+
+        // Animated rising bubbles during Air or Agitation
+        if ((_airOn || _agitatorOn) && fillH > 6) {
+            _u8g2.drawPixel(101, 49 - ((_bubblePhase * 2) % (fillH - 2)));
+            _u8g2.drawPixel(107, 49 - ((_bubblePhase * 3 + 4) % (fillH - 2)));
+            _u8g2.drawPixel(113, 49 - ((_bubblePhase * 2 + 8) % (fillH - 2)));
+            _u8g2.drawPixel(118, 49 - ((_bubblePhase * 3 + 12) % (fillH - 2)));
+        }
+    }
+
+    // Intake stream cascade during Step 6 / Refill
+    if (_intakeOn) {
+        _u8g2.drawVLine(109, 9, (fillH > 0 ? yTop - 9 : 38));
+        _u8g2.drawPixel(108, yTop); _u8g2.drawPixel(110, yTop); // Splash ripples
+    }
+
+    // Outtake drain effect during Step 5 / Harvest
+    if (_outtakeOn) {
+        _u8g2.drawVLine(103, 52, 3);
+        _u8g2.drawPixel(102, 54);
+    }
+
+    // Volume % text directly below vessel
+    _u8g2.setFont(u8g2_font_4x6_tf);
+    snprintf(buf, sizeof(buf), "%d%%", _waterLevel);
+    int pw = _u8g2.getStrWidth(buf);
+    _u8g2.drawStr(109 - (pw / 2), 60, buf);
+}
+
 // Page 1: Interactive Actuator Bench (Dev Mode Control)
 void DisplayManager::drawActuatorsView() {
     drawHeader("ACTUATOR BENCH");
@@ -593,6 +771,14 @@ void DisplayManager::update() {
     _lastUpdate = currentMillis;
 
     _u8g2.clearBuffer();
+
+    // 0. Demo Mode Dual View Screen Override
+    if (_demoActive) {
+        drawDemoView();
+        drawToastOverlay();
+        _u8g2.sendBuffer();
+        return;
+    }
 
     // 1. Hazard State Override
     if (strcmp(_state, "HAZARD") == 0 || strcmp(_state, "!!! HAZARD !!!") == 0) {

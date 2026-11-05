@@ -82,7 +82,8 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
                                    float vegIndex, float chlA, float growthRateMu, bool hasBaseline,
                                    bool photoperiodActive, uint8_t currentHr, bool storeThis,
                                    bool devMode, int rawDist, int levelPct, int distEmpty, int distFull,
-                                   bool oledAlwaysOn, bool oledSleeping) {
+                                   bool oledAlwaysOn, bool oledSleeping,
+                                   bool demoMode, uint8_t demoStep, const char* demoPhase) {
     if (!_client.connected()) return; // Don't block or leak if disconnected
     
     JsonDocument doc;
@@ -101,6 +102,9 @@ void MqttManager::publishTelemetry(const char* state, float wTemp, float aTemp, 
     doc["fanOn"] = rFan;
     doc["oledAlwaysOn"] = oledAlwaysOn;
     doc["oledSleeping"] = oledSleeping;
+    doc["demoMode"] = demoMode;
+    doc["demoStep"] = demoStep;
+    doc["demoPhase"] = demoPhase ? demoPhase : "";
     
     // ML Prediction Expected Format
     doc["Water_Temp_C"] = wTemp;

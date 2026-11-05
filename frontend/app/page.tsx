@@ -30,6 +30,7 @@ import { VitalTempCard } from "@/components/dashboard/VitalTempCard";
 import { AlgaeGrowthCard } from "@/components/dashboard/AlgaeGrowthCard";
 import { VirtualSensorsCard } from "@/components/dashboard/VirtualSensorsCard";
 import { ActuatorMatrixCard } from "@/components/dashboard/ActuatorMatrixCard";
+import { DemoShowcaseCard } from "@/components/dashboard/DemoShowcaseCard";
 import { BiomassChartCard } from "@/components/dashboard/BiomassChartCard";
 import { HardwareVitalsCard } from "@/components/dashboard/HardwareVitalsCard";
 import { SystemLogsCard } from "@/components/dashboard/SystemLogsCard";
@@ -310,8 +311,12 @@ export default function Dashboard() {
           {/* Center Column 3 & 4: Dedicated Central Digital Twin Bioreactor Simulation */}
           <ReactorTwinCard />
 
-          {/* Column 5 & 6: Actuator Matrix Deck */}
-          <ActuatorMatrixCard />
+          {/* Column 5 & 6: Actuator Matrix Deck or Demo Showcase Card */}
+          {telemetry.demoMode || fsmCurrentState === 'DEMO' ? (
+            <DemoShowcaseCard />
+          ) : (
+            <ActuatorMatrixCard />
+          )}
 
           {/* Lower Row: Biomass Chrono-Chart (Spans 4 columns) */}
           <BiomassChartCard />

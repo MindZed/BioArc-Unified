@@ -63,10 +63,11 @@ enum FSM_State {
     STATE_REFILL,
     STATE_HARVEST,
     STATE_HAZARD,
-    STATE_MANUAL_OVERRIDE
+    STATE_MANUAL_OVERRIDE,
+    STATE_DEMO
 };
 
-const char* stateNames[] = {"AWAIT", "COMM_FILL", "IDLE", "AGITATING", "REFILL", "HARVEST", "HAZARD", "MANUAL"};
+const char* stateNames[] = {"AWAIT", "COMM_FILL", "IDLE", "AGITATING", "REFILL", "HARVEST", "HAZARD", "MANUAL", "DEMO"};
 
 // ==========================================
 // SYSTEM METRICS & CONFIGURATION
@@ -205,6 +206,9 @@ struct TelemetrySnapshot {
     bool agitatorOn;
     bool fanOn;
     bool devMode;
+    bool demoMode;
+    uint8_t demoStep;
+    char demoPhase[32];
     uint16_t tcsR, tcsG, tcsB, tcsC;
     float greenRatio;
     float grRatio;
@@ -269,10 +273,15 @@ unsigned long systemReadyTime = 0;
 String bootReasonStr = "";
 bool networkServicesStarted = false;
 
-// Demo Mode Tracking
+// Demo Mode Tracking (Human-Friendly Showcase Routine)
 bool demoMode = false;
 uint8_t demoStep = 0;
 unsigned long demoStepStart = 0;
+int demoStartDistCm = 17;
+int demoStartLevelPct = 60;
+int demoTargetHarvestDist = 20; // 10% volume drop (~2.6-3 cm drop)
+int demoTargetRefillDist = 17;  // Restored baseline level
+char demoPhaseName[32] = "IDLE";
 
 // Optical Growth Rate Calculation
 float previousOD = 0.0f;
@@ -473,11 +482,14 @@ String getTelemetryJSON() {
         doc["growthRate"] = sharedTelemetry.growthRateMu;
         doc["lightOn"] = config.lightOnHr;
         doc["lightOff"] = config.lightOffHr;
+        doc["demoMode"] = sharedTelemetry.demoMode;
+        doc["demoStep"] = sharedTelemetry.demoStep;
+        doc["demoPhase"] = sharedTelemetry.demoPhase;
         xSemaphoreGive(xStateMutex);
     }
-    char buffer[512];
-    serializeJson(doc, buffer);
-    return String(buffer);
+    String output;
+    serializeJson(doc, output);
+    return output;
 }
 
 // ==========================================
@@ -589,8 +601,22 @@ void Task_FSM_Control(void* pvParameters) {
             else if (action == "demo_cycle") {
                 mqtt.publishLog("warning", "=== DEMO CYCLE STARTED ===");
                 demoMode = true;
-                demoStep = 0;
+                demoStep = 1;
                 demoStepStart = millis();
+                demoStartDistCm = (sharedTelemetry.distanceCM > 0 && sharedTelemetry.distanceCM < 250) ? sharedTelemetry.distanceCM : 17;
+                demoStartLevelPct = sharedTelemetry.waterLevelPct;
+                // 10% volume change equals approx 2.6cm (round to 3cm drop)
+                demoTargetHarvestDist = constrain(demoStartDistCm + 3, config.distFull, config.distEmpty);
+                demoTargetRefillDist = demoStartDistCm;
+                strncpy(demoPhaseName, "Sunlight & Air", sizeof(demoPhaseName) - 1);
+                currentState = STATE_DEMO;
+                relays.stopAll();
+                relays.setLight(true);
+                relays.setAir(true);
+                displays.setDemoMode(true, 1, "SUNLIGHT & AIR");
+                displays.wakeScreen();
+                mqtt.publishLog("info", "DEMO Step 1: Sunlight & Air sparging active.");
+                xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
             }
             else if (action == "dev_mode_on") {
                 devMode = true;
@@ -643,11 +669,21 @@ void Task_FSM_Control(void* pvParameters) {
                 pulseOuttakeActive = true;
                 mqtt.publishLog("info", "Pulsing Outtake Pump (5s jog)...");
             }
-            else if (action == "stop_all" || action == "kill_all") {
+            else if (action == "stop_all" || action == "kill_all" || action == "demo_stop" || action == "demo_cancel") {
                 relays.stopAll();
                 pulseIntakeActive = false;
                 pulseOuttakeActive = false;
-                mqtt.publishLog("info", "All Relays Stopped via Hardware Control.");
+                if (demoMode) {
+                    demoMode = false;
+                    demoStep = 0;
+                    strncpy(demoPhaseName, "IDLE", sizeof(demoPhaseName) - 1);
+                    displays.setDemoMode(false, 0, "");
+                    currentState = devMode ? STATE_MANUAL_OVERRIDE : STATE_IDLE;
+                    mqtt.publishLog("warning", "=== DEMO CYCLE ABORTED ===");
+                } else {
+                    mqtt.publishLog("info", "All Relays Stopped via Hardware Control.");
+                }
+                xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
             }
             else if (action == "air_polarity_high") {
                 relays.setAirActiveHigh(true);
@@ -845,52 +881,87 @@ void Task_FSM_Control(void* pvParameters) {
             mqtt.publishLog("info", "Outtake pulse jog complete (5s).");
         }
 
-        // 5. Finite State Machine Transitions
+        // 5. Finite State Machine Transitions (Modernized Demo Showcase Routine)
         if (demoMode) {
             unsigned long elapsed = millis() - demoStepStart;
-            if (demoStep == 0) {
-                currentState = STATE_IDLE;
-                relays.stopAll();
+            currentState = STATE_DEMO;
+
+            if (demoStep == 1 && elapsed > 6000) {
+                // Step 2: Cooling Fan
+                demoStep = 2;
+                demoStepStart = millis();
+                strncpy(demoPhaseName, "Cooling Fan", sizeof(demoPhaseName) - 1);
+                relays.setLight(true);
                 relays.setAir(true);
-                mqtt.publishLog("info", "DEMO: State shifted to IDLE (Air ON)");
+                relays.setExhaustFan(true);
+                displays.setDemoMode(true, 2, "COOLING FAN");
+                mqtt.publishLog("info", "DEMO 2/6: Cooling Fan active (Thermal Regulation).");
                 xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
-                demoStep++; demoStepStart = millis();
             }
-            else if (demoStep == 1 && elapsed > 5000) {
-                currentState = STATE_AGITATING;
+            else if (demoStep == 2 && elapsed > 6000) {
+                // Step 3: Mixing Water
+                demoStep = 3;
+                demoStepStart = millis();
+                strncpy(demoPhaseName, "Mixing Water", sizeof(demoPhaseName) - 1);
+                relays.setExhaustFan(false);
                 relays.setAgitator(true);
-                mqtt.publishLog("info", "DEMO: State shifted to AGITATING");
+                displays.setDemoMode(true, 3, "MIXING WATER");
+                mqtt.publishLog("info", "DEMO 3/6: Mixing Water active (Magnetic Agitation).");
                 xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
-                demoStep++; demoStepStart = millis();
             }
-            else if (demoStep == 2 && elapsed > 5000) {
-                currentState = STATE_HARVEST;
+            else if (demoStep == 3 && elapsed > 6000) {
+                // Step 4: Algae Health Check
+                demoStep = 4;
+                demoStepStart = millis();
+                strncpy(demoPhaseName, "Algae Health Check", sizeof(demoPhaseName) - 1);
+                relays.setAgitator(false);
+                relays.setLight(true);
+                relays.setAir(true);
+                displays.setDemoMode(true, 4, "HEALTH CHECK");
+                mqtt.publishLog("info", "DEMO 4/6: Algae Health Check (Spectrophotometric Scan).");
+                xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
+            }
+            else if (demoStep == 4 && elapsed > 6000) {
+                // Step 5: Harvesting (10% Drain)
+                demoStep = 5;
+                demoStepStart = millis();
+                strncpy(demoPhaseName, "Harvesting (10% Drain)", sizeof(demoPhaseName) - 1);
                 relays.stopAll();
-                relays.setOuttake(true);
-                mqtt.publishLog("info", "DEMO: State shifted to HARVEST");
+                relays.setOuttake(true); // Drain pump ON
+                displays.setDemoMode(true, 5, "HARVEST (10%)");
+                mqtt.publishLog("warning", "DEMO 5/6: Harvesting 10% culture volume via Outtake pump.");
                 xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
-                demoStep++; demoStepStart = millis();
             }
-            else if (demoStep == 3 && elapsed > 5000) {
-                currentState = STATE_IDLE;
-                relays.stopAll();
-                mqtt.publishLog("info", "DEMO: State shifted to IDLE (Wait)");
-                xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
-                demoStep++; demoStepStart = millis();
+            else if (demoStep == 5) {
+                // Check if target 10% volume has been extracted (~3cm drop), or 16s safety timeout
+                bool levelDropped = (currentDist >= demoTargetHarvestDist && currentDist > 0);
+                if (levelDropped || elapsed > 16000) {
+                    // Transition to Step 6: Refilling Tank
+                    demoStep = 6;
+                    demoStepStart = millis();
+                    strncpy(demoPhaseName, "Refilling Tank", sizeof(demoPhaseName) - 1);
+                    relays.stopAll();
+                    relays.setIntake(true); // Refill pump ON
+                    displays.setDemoMode(true, 6, "REFILLING TANK");
+                    mqtt.publishLog("warning", "DEMO 6/6: Refilling tank back to starting baseline level.");
+                    xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
+                }
             }
-            else if (demoStep == 4 && elapsed > 5000) {
-                currentState = STATE_REFILL;
-                relays.setIntake(true);
-                mqtt.publishLog("info", "DEMO: State shifted to REFILL");
-                xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
-                demoStep++; demoStepStart = millis();
-            }
-            else if (demoStep == 5 && elapsed > 5000) {
-                currentState = STATE_IDLE;
-                relays.stopAll();
-                mqtt.publishLog("info", "=== DEMO CYCLE COMPLETE ===");
-                xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
-                demoMode = false;
+            else if (demoStep == 6) {
+                // Check if baseline level has been restored, or 16s safety timeout
+                bool levelRestored = (currentDist <= demoTargetRefillDist && currentDist > 0);
+                if (levelRestored || elapsed > 16000) {
+                    // Transition to Complete
+                    demoStep = 7;
+                    demoMode = false;
+                    strncpy(demoPhaseName, "Demo Complete", sizeof(demoPhaseName) - 1);
+                    relays.stopAll();
+                    displays.setDemoMode(false, 0, "");
+                    displays.showToast("DEMO COMPLETE", 3000);
+                    currentState = devMode ? STATE_MANUAL_OVERRIDE : STATE_IDLE;
+                    mqtt.publishLog("info", "=== DEMO CYCLE COMPLETE: Reservoir Restored ===");
+                    xEventGroupSetBits(xControlEvents, EVENT_FORCE_TELEMETRY);
+                }
             }
         } else {
             switch (currentState) {
@@ -1018,6 +1089,10 @@ void Task_FSM_Control(void* pvParameters) {
             sharedTelemetry.agitatorOn = relays.isAgitatorOn();
             sharedTelemetry.fanOn = relays.isExhaustFanOn();
             sharedTelemetry.devMode = devMode;
+            sharedTelemetry.demoMode = demoMode;
+            sharedTelemetry.demoStep = demoStep;
+            strncpy(sharedTelemetry.demoPhase, demoPhaseName, sizeof(sharedTelemetry.demoPhase) - 1);
+            sharedTelemetry.demoPhase[sizeof(sharedTelemetry.demoPhase) - 1] = '\0';
             sharedTelemetry.rawDistanceCM = currentDist;
             sharedTelemetry.isDaytime = isDaytime;
             xSemaphoreGive(xStateMutex);
@@ -1295,7 +1370,8 @@ void Task_Network_Telemetry(void* pvParameters) {
                 snap.greenRatio, snap.grRatio, snap.pseudoOD, snap.vegIndex, snap.chlA, snap.growthRateMu, snap.hasBaseline,
                 snap.isDaytime, snap.currentHr, storeThis,
                 snap.devMode, snap.rawDistanceCM, snap.waterLevelPct, config.distEmpty, config.distFull,
-                config.oledAlwaysOn, displays.isScreenSleeping()
+                config.oledAlwaysOn, displays.isScreenSleeping(),
+                snap.demoMode, snap.demoStep, snap.demoPhase
             );
         }
 
@@ -1363,6 +1439,7 @@ void Task_Dual_Display(void* pvParameters) {
             displays.setDevData(snap.devMode, snap.rawDistanceCM, snap.fanOn);
             displays.setActuatorStates(snap.lightOn, snap.airOn, snap.intakeOn, snap.outtakeOn, snap.agitatorOn, snap.fanOn);
             displays.setCalibrationData(config.distEmpty, config.distFull);
+            displays.setDemoMode(snap.demoMode, snap.demoStep, snap.demoPhase);
             
             uint8_t inJogSec = pulseIntakeActive ? (5 - constrain((millis() - pulseIntakeTimer) / 1000, 0, 5)) : 0;
             uint8_t outJogSec = pulseOuttakeActive ? (5 - constrain((millis() - pulseOuttakeTimer) / 1000, 0, 5)) : 0;

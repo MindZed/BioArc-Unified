@@ -62,6 +62,10 @@ public:
     bool isScreenSleeping() const { return _screenSleeping; }
     void setSleepTimeout(unsigned long ms) { _sleepTimeoutMs = ms; }
 
+    // Demo Showcase Routine Display
+    void setDemoMode(bool active, uint8_t step = 0, const char* phaseName = "");
+    bool isDemoMode() const { return _demoActive; }
+
     // Renders the 128x64 display
     void update();
 
@@ -124,10 +128,16 @@ private:
     unsigned long _lastInteractionTime;
     unsigned long _sleepTimeoutMs;
 
+    // Demo Mode State
+    bool _demoActive;
+    uint8_t _demoStep;
+    char _demoPhase[32];
+
     // Screen Renderers
     void drawHeader(const char* title = nullptr);
     void drawPaginationDots(uint8_t current, uint8_t total);
     void drawHeroVesselView();
+    void drawDemoView();
     void drawActuatorsView();
     void drawGeometryView();
     void drawHazardView();

@@ -25,6 +25,9 @@ export interface TelemetryData {
   fanOn?: boolean;
   oledAlwaysOn?: boolean;
   oledSleeping?: boolean;
+  demoMode?: boolean;
+  demoStep?: number;
+  demoPhase?: string;
 }
 
 export interface FSMState {
