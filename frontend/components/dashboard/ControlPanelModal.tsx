@@ -14,7 +14,7 @@ interface ControlPanelModalProps {
 }
 
 export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
-  const { sendActionCommand, sendConfigCommand, openAdminAuthModal } = useStore();
+  const { sendActionCommand, sendConfigCommand, openAdminAuthModal, startDemoCycle } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -144,8 +144,11 @@ export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
                   <RotateCw className="w-3.5 h-3.5 text-amber-400" /> Restart ESP32
                 </button>
                 <button
-                  onClick={() => sendActionCommand('demo_cycle')}
-                  className="py-2.5 px-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl text-xs font-bold border border-primary/30 transition-colors col-span-2 flex items-center justify-center gap-1.5 cursor-pointer"
+                  onClick={() => {
+                    startDemoCycle();
+                    onClose();
+                  }}
+                  className="py-2.5 px-3 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl text-xs font-bold border border-primary/30 transition-colors col-span-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(34,197,94,0.15)]"
                 >
                   <Play className="w-3.5 h-3.5" /> Run Demo Cycle
                 </button>

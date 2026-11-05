@@ -35,6 +35,9 @@ type Telemetry struct {
 	RelayFan      bool      `gorm:"column:relayFan" json:"relayFan"`
 	DevMode       bool      `gorm:"column:devMode" json:"devMode"`
 	RawDistanceCm int       `gorm:"column:rawDistanceCm" json:"rawDistanceCm"`
+	DemoMode      bool      `gorm:"column:demoMode" json:"demoMode"`
+	DemoStep      int       `gorm:"column:demoStep" json:"demoStep"`
+	DemoPhase     string    `gorm:"column:demoPhase" json:"demoPhase"`
 }
 
 func (Telemetry) TableName() string {
@@ -83,6 +86,9 @@ type MQTTTelemetryPayload struct {
 	FanOn         bool    `json:"fanOn,omitempty"`
 	OledAlwaysOn  bool    `json:"oledAlwaysOn,omitempty"`
 	OledSleeping  bool    `json:"oledSleeping,omitempty"`
+	DemoMode      bool    `json:"demoMode,omitempty"`
+	DemoStep      int     `json:"demoStep,omitempty"`
+	DemoPhase     string  `json:"demoPhase,omitempty"`
 	Relays        struct {
 		Intake   bool `json:"intake"`
 		Outtake  bool `json:"outtake"`

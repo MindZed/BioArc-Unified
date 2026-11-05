@@ -189,6 +189,9 @@ func handleTelemetry(client mqtt.Client, msg mqtt.Message) {
 		RelayFan:      payload.IsFanOn(),
 		DevMode:       payload.DevMode,
 		RawDistanceCm: payload.GetRawDistance(),
+		DemoMode:      payload.DemoMode,
+		DemoStep:      payload.DemoStep,
+		DemoPhase:     payload.DemoPhase,
 	}
 
 	if payload.StoreThis {

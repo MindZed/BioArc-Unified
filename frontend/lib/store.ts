@@ -45,6 +45,7 @@ interface BioArcStore {
   pulseIntake: () => Promise<boolean>;
   pulseOuttake: () => Promise<boolean>;
   stopAll: () => Promise<boolean>;
+  startDemoCycle: () => void;
   runDiagnostics: () => Promise<boolean>;
   
   // UI & App Actions
@@ -284,6 +285,17 @@ export const useStore = create<BioArcStore>((set, get) => ({
   },
   stopAll: async () => {
     return get().sendActionCommand('stop_all');
+  },
+  startDemoCycle: () => {
+    set({
+      fsmCurrentState: 'DEMO',
+      telemetry: {
+        ...get().telemetry,
+        demoMode: true,
+        demoStep: 0,
+        demoPhase: 'Preparing Demo...'
+      }
+    });
   },
   runDiagnostics: async () => {
     return get().sendActionCommand('diagnose');
