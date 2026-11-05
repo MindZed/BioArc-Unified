@@ -9,7 +9,7 @@ import { useSession } from "next-auth/react";
 import { ShieldAlert, Wrench, Timer, Droplet, Lock, LockOpen, OctagonAlert, Monitor } from "lucide-react";
 
 export function ActuatorMatrixCard() {
-  const { fsm, fsmCurrentState, sendActionCommand, telemetry } = useStore();
+  const { fsm, fsmCurrentState, sendActionCommand, telemetry, openAdminAuthModal } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -20,8 +20,8 @@ export function ActuatorMatrixCard() {
   return (
     <div className="col-span-2 md:col-span-3 lg:col-span-2 lg:row-span-2 bg-surface-container-lowest border border-outline-variant flex flex-col motion-card min-h-[380px] font-clash shadow-md p-4 rounded-2xl opacity-0 hover:border-outline/50 transition-colors duration-300 relative overflow-hidden">
       
-      {/* Admin Access Lock Overlay (Bypassed if Dev Mode was activated) */}
-      {!isAdmin && !isDevActive && (
+      {/* Admin Access Lock Overlay - Strictly requires Admin Access */}
+      {!isAdmin && (
         <div className="absolute inset-0 z-20 bg-background/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6">
           <div className="w-12 h-12 rounded-full bg-error/10 border border-error/20 flex items-center justify-center mb-3">
             <ShieldAlert className="w-6 h-6 text-error" />
@@ -30,6 +30,13 @@ export function ActuatorMatrixCard() {
           <p className="text-[11px] text-on-surface-variant font-satoshi mt-1 max-w-[200px]">
             Hardware actuator toggles and Dev Bench controls are locked for operator safety.
           </p>
+          <button
+            onClick={() => openAdminAuthModal()}
+            className="mt-3.5 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold font-clash uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] cursor-pointer"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span>Unlock Controls</span>
+          </button>
         </div>
       )}
 
@@ -52,7 +59,7 @@ export function ActuatorMatrixCard() {
       </div>
 
       {/* Actuator Relay Items Grid */}
-      <ul className={`flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-1.5 ${!isAdmin && !isDevActive ? 'opacity-20 pointer-events-none' : ''}`}>
+      <ul className={`flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-1.5 ${!isAdmin ? 'opacity-20 pointer-events-none' : ''}`}>
         <ActuatorRow
           name="Inlet Pump"
           icon="water_drop"
@@ -97,8 +104,8 @@ export function ActuatorMatrixCard() {
         />
       </ul>
 
-      {/* Action Footers */}
-      {(isAdmin || isDevActive) && (
+      {/* Action Footers - Strictly requires Admin Access */}
+      {isAdmin && (
         <div className="mt-3 pt-3 border-t border-outline-variant/50 flex flex-col gap-2">
           
           {/* Commissioning Fill Button (When Standby) */}

@@ -49,6 +49,10 @@ interface BioArcStore {
   
   // UI & App Actions
   toggleSidebar: () => void;
+  isAdminAuthModalOpen: boolean;
+  adminAuthSuccessCallback: (() => void) | null;
+  openAdminAuthModal: (onSuccess?: () => void) => void;
+  closeAdminAuthModal: () => void;
   setActiveSession: (id: string | null) => void;
   createNewSession: () => Promise<void>;
   sendMessage: (content: string) => void;
@@ -68,6 +72,16 @@ export const useStore = create<BioArcStore>((set, get) => ({
   fsm: generateMockFSM(),
   fsmCurrentState: 'IDLE',
   isSidebarCollapsed: true,
+  isAdminAuthModalOpen: false,
+  adminAuthSuccessCallback: null,
+  openAdminAuthModal: (onSuccess) => set({ 
+    isAdminAuthModalOpen: true, 
+    adminAuthSuccessCallback: onSuccess || null 
+  }),
+  closeAdminAuthModal: () => set({ 
+    isAdminAuthModalOpen: false, 
+    adminAuthSuccessCallback: null 
+  }),
   chatHistory: [],
   activeSessionId: null,
   fastMode: true,

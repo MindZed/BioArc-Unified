@@ -14,7 +14,7 @@ interface ControlPanelModalProps {
 }
 
 export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
-  const { sendActionCommand, sendConfigCommand } = useStore();
+  const { sendActionCommand, sendConfigCommand, openAdminAuthModal } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -66,6 +66,13 @@ export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
                 You must be authenticated with administrative privileges to execute hardware overrides and configure schedule parameters.
               </p>
             </div>
+            <button
+              onClick={() => openAdminAuthModal()}
+              className="mt-2 flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black rounded-xl text-xs font-bold font-clash uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.25)] cursor-pointer"
+            >
+              <Lock className="w-4 h-4" />
+              Unlock with Admin Password
+            </button>
           </div>
         ) : (
           <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">

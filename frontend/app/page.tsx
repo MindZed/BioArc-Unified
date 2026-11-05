@@ -20,7 +20,8 @@ import {
   Droplets,
   Compass,
   Radio,
-  Wrench
+  Wrench,
+  Lock
 } from "lucide-react";
 
 // Modular Bento Dashboard Components
@@ -34,6 +35,7 @@ import { HardwareVitalsCard } from "@/components/dashboard/HardwareVitalsCard";
 import { SystemLogsCard } from "@/components/dashboard/SystemLogsCard";
 import { CommissioningModal } from "@/components/dashboard/CommissioningModal";
 import { ControlPanelModal } from "@/components/dashboard/ControlPanelModal";
+import { AdminPasswordModal } from "@/components/dashboard/AdminPasswordModal";
 
 export default function Dashboard() {
   const { 
@@ -44,7 +46,8 @@ export default function Dashboard() {
     isWsConnected, 
     espConnected, 
     handleLiveTelemetry,
-    toggleDevMode
+    toggleDevMode,
+    openAdminAuthModal
   } = useStore();
 
   const [showControlPanel, setShowControlPanel] = useState(false);
@@ -258,16 +261,25 @@ export default function Dashboard() {
 
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => toggleDevMode()}
+            onClick={() => {
+              if (!isAdmin) {
+                openAdminAuthModal(() => {
+                  toggleDevMode();
+                });
+              } else {
+                toggleDevMode();
+              }
+            }}
             className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold font-clash tracking-wider uppercase transition-all duration-200 cursor-pointer ${
               fsm?.devMode || fsmCurrentState === 'DEV'
                 ? 'bg-amber-500 text-black shadow-md hover:bg-amber-400 font-extrabold'
                 : 'bg-surface-container text-on-surface-variant border border-outline-variant/60 hover:text-amber-400 hover:border-amber-400/30'
             }`}
-            title="Toggle Bench Development Mode"
+            title={isAdmin ? "Toggle Bench Development Mode" : "Admin password required to enable Dev Mode"}
           >
             <Wrench className="w-3.5 h-3.5" />
             <span>{fsm?.devMode || fsmCurrentState === 'DEV' ? 'DEV MODE: ACTIVE' : 'DEV MODE'}</span>
+            {!isAdmin && <Lock className="w-3 h-3 ml-0.5 opacity-60 text-amber-400" />}
           </button>
 
           <button
@@ -321,6 +333,9 @@ export default function Dashboard() {
         isOpen={showControlPanel}
         onClose={() => setShowControlPanel(false)}
       />
+
+      {/* Admin Verification Modal for Dev Mode & Actuator Controls */}
+      <AdminPasswordModal />
 
     </div>
   );

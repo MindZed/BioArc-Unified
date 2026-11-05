@@ -8,12 +8,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import { Activity, Wrench, AlertTriangle, ShieldCheck, Terminal, Disc3, Database, Lock, Unlock, X, Save, Sparkles, Cpu, Clock, CheckCircle2, RefreshCw, Plus, Trash2, Layers, Search, FileText, Loader2, FileUp, Monitor } from 'lucide-react';
 import { useSession } from 'next-auth/react';
+import { AdminPasswordModal } from '@/components/dashboard/AdminPasswordModal';
 
 export default function MaintenancePage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
-  const { maintenanceLogs, hardwareLifespan, systemHealthSummary, lastAnalyzedAt, setMaintenanceData, telemetry, sendActionCommand } = useStore();
+  const { maintenanceLogs, hardwareLifespan, systemHealthSummary, lastAnalyzedAt, setMaintenanceData, telemetry, sendActionCommand, openAdminAuthModal } = useStore();
   const [mounted, setMounted] = useState(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState(false);
   const [contextTab, setContextTab] = useState<'list' | 'add' | 'upload'>('list');
@@ -780,6 +781,13 @@ export default function MaintenancePage() {
                       <h3 className="font-clash text-xl font-semibold text-white">Admin Authorization Required</h3>
                       <p className="text-zinc-400 font-satoshi text-sm mt-2">Only administrators can view and modify the physical reactor knowledge base.</p>
                     </div>
+                    <button
+                      onClick={() => openAdminAuthModal()}
+                      className="mt-2 flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black rounded-xl text-xs font-bold font-clash uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.25)] cursor-pointer"
+                    >
+                      <Lock className="w-4 h-4" />
+                      Unlock with Admin Password
+                    </button>
                   </div>
                 ) : (
                   <>
@@ -1155,6 +1163,9 @@ export default function MaintenancePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Admin Verification Modal */}
+      <AdminPasswordModal />
     </div>
   );
 }
