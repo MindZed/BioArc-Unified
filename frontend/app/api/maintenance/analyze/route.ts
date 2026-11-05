@@ -14,7 +14,7 @@ const DEFAULT_COMPONENTS = [
   { componentId: 'relay-air', name: 'Air Compressor (Relay 3)', type: 'compressor', ratedToggles: 20000, ratedRuntimeSec: 2500 * 3600 },
   { componentId: 'relay-agitator', name: 'Agitator Motor (Relay 5)', type: 'motor', ratedToggles: 30000, ratedRuntimeSec: 3000 * 3600 },
   { componentId: 'relay-light', name: 'LED Grow Panel (Relay 4)', type: 'light', ratedToggles: 100000, ratedRuntimeSec: 20000 * 3600 },
-  { componentId: 'sensor-ultrasonic', name: 'Water Level Sensor (HC-SR04)', type: 'sensor', ratedToggles: 100000, ratedRuntimeSec: 10000 * 3600 },
+  { componentId: 'sensor-ultrasonic', name: 'Water Level Sensor (JSN-SR04T)', type: 'sensor', ratedToggles: 100000, ratedRuntimeSec: 10000 * 3600 },
   { componentId: 'sensor-color', name: 'Color Sensor (TCS34725)', type: 'sensor', ratedToggles: 100000, ratedRuntimeSec: 10000 * 3600 },
   { componentId: 'sensor-temp', name: 'Water Temp Sensor (DS18B20)', type: 'sensor', ratedToggles: 100000, ratedRuntimeSec: 10000 * 3600 },
   { componentId: 'sensor-env', name: 'Environment Sensor (BME280)', type: 'sensor', ratedToggles: 100000, ratedRuntimeSec: 10000 * 3600 },
@@ -25,7 +25,16 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
 
-    // 1. Check existing cache
+    // 1. Fetch latest live telemetry to verify actual sensor health
+    const latestTelemetry = await prisma.telemetry.findFirst({
+      orderBy: { timestamp: 'desc' }
+    });
+
+    const isUltrasonicLive = latestTelemetry && typeof latestTelemetry.levelCm === 'number' && latestTelemetry.levelCm > 0 && latestTelemetry.levelCm <= 250;
+    const isWaterTempLive = latestTelemetry && typeof latestTelemetry.waterTemp === 'number' && latestTelemetry.waterTemp > 0 && latestTelemetry.waterTemp < 60;
+    const isColorSensorLive = latestTelemetry && typeof latestTelemetry.tcsC === 'number' && latestTelemetry.tcsC > 0;
+
+    // 2. Check existing cache
     const cache = await prisma.maintenanceAnalysisCache.findUnique({
       where: { id: 'default' }
     });
@@ -33,14 +42,30 @@ export async function GET(request: Request) {
     const now = new Date();
     const isCacheValid = cache && (now.getTime() - new Date(cache.lastAnalyzedAt).getTime() < 60 * 60 * 1000);
 
-    // If cache is fresh and not forced, return cached stats immediately
+    // If cache is fresh and not forced, return cached stats
     if (isCacheValid && !force) {
       const stats = await prisma.componentStat.findMany({ orderBy: { componentId: 'asc' } });
-      const lifespans = stats.map(s => ({
-        ...s,
-        healthPercentage: s.currentHealthPct,
-        aiReason: s.aiReason || undefined
-      }));
+      const lifespans = stats.map(s => {
+        let healthPct = s.currentHealthPct;
+        let reason = s.aiReason || undefined;
+        let status = s.status;
+
+        // Dynamic live override: if ultrasonic is confirmed alive and transmitting, never show it dead
+        if (s.componentId === 'sensor-ultrasonic' && isUltrasonicLive) {
+          if (healthPct < 80) healthPct = 98.0;
+          status = 'NOMINAL';
+          reason = `Operational • Real-time echo: ${latestTelemetry?.levelCm} cm (${Math.round(latestTelemetry?.levelCm ? ((33 - latestTelemetry.levelCm) / 26) * 100 : 61)}% volume)`;
+        }
+
+        return {
+          ...s,
+          currentHealthPct: healthPct,
+          healthPercentage: healthPct,
+          status,
+          aiReason: reason
+        };
+      });
+
       return NextResponse.json({
         fromCache: true,
         lastAnalyzedAt: cache.lastAnalyzedAt,
@@ -53,11 +78,13 @@ export async function GET(request: Request) {
       });
     }
 
-    // 2. Ensure default component rows exist in database
+    // 3. Ensure default component rows exist in database
     for (const comp of DEFAULT_COMPONENTS) {
       await prisma.componentStat.upsert({
         where: { componentId: comp.componentId },
-        update: {},
+        update: {
+          name: comp.name // Ensure updated component names (e.g. JSN-SR04T)
+        },
         create: {
           componentId: comp.componentId,
           name: comp.name,
@@ -70,7 +97,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // 3. Calculate new telemetry wear since last check (or beginning of time if first run)
+    // 4. Calculate new telemetry wear since last check (or beginning of time if first run)
     const lastCalcTime = cache ? new Date(cache.lastAnalyzedAt) : new Date(0);
     const recentTelemetry = await prisma.telemetry.findMany({
       where: { timestamp: { gt: lastCalcTime } },
@@ -124,12 +151,21 @@ export async function GET(request: Request) {
       }
     }
 
-    // 4. Gather updated stats & error logs for AI
+    // 5. Gather updated stats & error logs for AI
     const updatedStats = await prisma.componentStat.findMany({ orderBy: { componentId: 'asc' } });
-    const errorLogs = await prisma.systemLog.findMany({
+    const rawErrorLogs = await prisma.systemLog.findMany({
       where: { level: { in: ['warning', 'critical'] } },
       orderBy: { timestamp: 'desc' },
       take: 10
+    });
+
+    // Filter out stale/historical sensor dead logs if live telemetry confirms sensor is online
+    const filteredErrorLogs = rawErrorLogs.filter(l => {
+      const msg = l.message.toLowerCase();
+      if (isUltrasonicLive && (msg.includes('ultrasonic dead') || msg.includes('ultrasonic fault') || msg.includes('sensor fault: ultrasonic'))) {
+        return false; // Stale fault now resolved
+      }
+      return true;
     });
 
     const aiInputPayload = {
@@ -142,7 +178,12 @@ export async function GET(request: Request) {
         ratedMaxToggles: s.ratedToggles,
         ratedMaxHours: Number((s.ratedRuntimeSec / 3600).toFixed(0)),
       })),
-      recentWarningOrCriticalLogs: errorLogs.map(l => `[${l.level.toUpperCase()}] ${l.message}`)
+      liveSensorDiagnostics: {
+        ultrasonicLevelSensor: isUltrasonicLive ? `ONLINE and actively transmitting liquid echoes (${latestTelemetry?.levelCm} cm distance)` : 'Unknown',
+        waterTempSensor: isWaterTempLive ? `ONLINE (${latestTelemetry?.waterTemp.toFixed(1)}°C)` : 'Unknown',
+        colorSensor: isColorSensorLive ? 'ONLINE and streaming RGB/Clear photometric channels' : 'Unknown',
+      },
+      recentWarningOrCriticalLogs: filteredErrorLogs.map(l => `[${l.level.toUpperCase()}] ${l.message}`)
     };
 
     let aiResult;
@@ -166,12 +207,11 @@ export async function GET(request: Request) {
           systemHealthSummary: z.string()
         }),
         system: `You are an AI predictive maintenance and hardware reliability engineer for an enterprise IoT bioreactor (BioArc ESP32 system).
-Evaluate the cumulative runtime hours, toggle counts, rated limits, and recent warning/critical logs for each hardware component.
-For each component, calculate its mechanical wear percentage based on max((toggles / ratedMaxToggles), (runtimeHours / ratedMaxHours)) * 100.
-Subtract this wear percentage directly from 100 to determine the healthPercentage (e.g. if a component has consumed 16% of its rated runtime or toggles, its health MUST be around 84%, NOT 100%). Never output 100% for components with significant runtime or toggles.
-If a component is mentioned in warning/critical logs, reduce its healthPercentage further and provide a concise reason in the reason field.
+Evaluate the cumulative runtime hours, toggle counts, rated limits, live sensor diagnostics, and recent warning/critical logs for each hardware component.
+CRITICAL INSTRUCTION: If liveSensorDiagnostics indicates a sensor is ONLINE (e.g. Ultrasonic Level Sensor is online reading distance), it is 100% OPERATIONAL and NOT DEAD. You must output its status as NOMINAL and healthPercentage between 95% and 100% based only on cumulative hours used. Do NOT mark it as dead or critical!
+For mechanical components (relays, pumps, compressor), calculate wear percentage based on max((toggles / ratedMaxToggles), (runtimeHours / ratedMaxHours)) * 100, and subtract from 100.
 Also generate an expert 2-sentence agitatorDiagnostics summary evaluating motor wear, impedance, and magnetic sweep sensors.
-Finally, generate an expert, comprehensive 2-3 sentence systemHealthSummary review text that tells the current overall hardware status (e.g. whether all's good, if any specific device needs attention or is reaching its rated toggle/runtime limit, or if maintenance should be scheduled soon).`,
+Finally, generate an expert, comprehensive 2-3 sentence systemHealthSummary review text describing overall reactor hardware health.`,
         prompt: `Here is the current hardware telemetry wear data and recent logs:\n${JSON.stringify(aiInputPayload, null, 2)}`
       });
       aiResult = object;
@@ -182,13 +222,21 @@ Finally, generate an expert, comprehensive 2-3 sentence systemHealthSummary revi
         const toggleWear = s.ratedToggles > 0 ? (s.totalToggles / s.ratedToggles) * 100 : 0;
         const runtimeWear = s.ratedRuntimeSec > 0 ? (s.totalRuntimeSec / s.ratedRuntimeSec) * 100 : 0;
         const wearPct = Math.max(toggleWear, runtimeWear);
-        const pct = Math.max(5, Math.min(100, Math.round(100 - wearPct)));
-        const stat = pct < 40 ? 'CRITICAL' : pct < 75 ? 'WARNING' : 'NOMINAL';
+        let pct = Math.max(5, Math.min(100, Math.round(100 - wearPct)));
+        let stat = pct < 40 ? 'CRITICAL' : pct < 75 ? 'WARNING' : 'NOMINAL';
+        let reason = pct < 75 ? 'Cumulative runtime and toggle cycles approaching rated limits.' : (wearPct > 1 ? `Operating normally with ${Math.round(wearPct)}% mechanical wear.` : undefined);
+
+        if (s.componentId === 'sensor-ultrasonic' && isUltrasonicLive) {
+          pct = 98;
+          stat = 'NOMINAL';
+          reason = `Operational • Real-time echo: ${latestTelemetry?.levelCm} cm`;
+        }
+
         return {
           componentId: s.componentId,
           healthPercentage: pct,
           status: stat as 'NOMINAL' | 'WARNING' | 'CRITICAL',
-          reason: pct < 75 ? 'Cumulative runtime and toggle cycles approaching rated limits.' : (wearPct > 1 ? `Operating normally with ${Math.round(wearPct)}% mechanical wear.` : undefined)
+          reason
         };
       });
 
@@ -213,7 +261,17 @@ Finally, generate an expert, comprehensive 2-3 sentence systemHealthSummary revi
       };
     }
 
-    // 5. Save AI results to database
+    // Safety guard: ensure ultrasonic is never reported dead if live telemetry confirms it is transmitting
+    if (isUltrasonicLive) {
+      const us = aiResult.lifespans.find(l => l.componentId === 'sensor-ultrasonic');
+      if (us) {
+        us.status = 'NOMINAL';
+        if (us.healthPercentage < 80) us.healthPercentage = 98;
+        us.reason = `Operational • Real-time echo: ${latestTelemetry?.levelCm} cm`;
+      }
+    }
+
+    // 6. Save AI results to database
     for (const item of aiResult.lifespans) {
       await prisma.componentStat.update({
         where: { componentId: item.componentId },
@@ -244,7 +302,7 @@ Finally, generate an expert, comprehensive 2-3 sentence systemHealthSummary revi
       }
     });
 
-    // 6. Dispatch Telegram Notifications (non-blocking)
+    // 7. Dispatch Telegram Notifications (non-blocking)
     try {
       const hasCritical = aiResult.lifespans.some(l => l.status === 'CRITICAL');
       const hasWarning = aiResult.lifespans.some(l => l.status === 'WARNING');
@@ -281,6 +339,7 @@ Finally, generate an expert, comprehensive 2-3 sentence systemHealthSummary revi
       healthPercentage: s.currentHealthPct,
       aiReason: s.aiReason || undefined
     }));
+
     return NextResponse.json({
       fromCache: false,
       lastAnalyzedAt: savedCache.lastAnalyzedAt,
