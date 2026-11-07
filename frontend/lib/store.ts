@@ -12,6 +12,14 @@ if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
   API_BASE_URL = API_BASE_URL.replace('http://', 'https://').replace(':8080', '');
 }
 
+export interface PumpConfirmOptions {
+  pump: 'inlet' | 'outlet';
+  action: string;
+  title?: string;
+  description?: string;
+  isJog?: boolean;
+}
+
 interface BioArcStore {
   isWsConnected: boolean;
   espConnected: boolean;
@@ -54,6 +62,10 @@ interface BioArcStore {
   adminAuthSuccessCallback: (() => void) | null;
   openAdminAuthModal: (onSuccess?: () => void) => void;
   closeAdminAuthModal: () => void;
+  pumpConfirmModal: PumpConfirmOptions | null;
+  openPumpConfirmModal: (options: PumpConfirmOptions) => void;
+  closePumpConfirmModal: () => void;
+  confirmPumpAction: () => Promise<boolean>;
   setActiveSession: (id: string | null) => void;
   createNewSession: () => Promise<void>;
   sendMessage: (content: string) => void;
@@ -83,6 +95,16 @@ export const useStore = create<BioArcStore>((set, get) => ({
     isAdminAuthModalOpen: false, 
     adminAuthSuccessCallback: null 
   }),
+  pumpConfirmModal: null,
+  openPumpConfirmModal: (options) => set({ pumpConfirmModal: options }),
+  closePumpConfirmModal: () => set({ pumpConfirmModal: null }),
+  confirmPumpAction: async () => {
+    const modal = get().pumpConfirmModal;
+    if (!modal) return false;
+    const action = modal.action;
+    set({ pumpConfirmModal: null });
+    return get().sendActionCommand(action);
+  },
   chatHistory: [],
   activeSessionId: null,
   fastMode: true,

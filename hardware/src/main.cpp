@@ -826,6 +826,20 @@ void Task_FSM_Control(void* pvParameters) {
             if (currentDist <= 1 && currentDist > 0 && currentState != STATE_COMMISSION_FILL) {
                 triggerHazard("OVERFLOW RISK! Level <= 1cm");
             }
+            
+            // Failsafe Dry-Run Protection: Auto-stop outlet pump if vessel reaches empty depth
+            if (relays.isOuttakeOn() && currentDist >= config.distEmpty && currentDist > 0 && !demoMode) {
+                relays.setOuttake(false);
+                pulseOuttakeActive = false;
+                mqtt.publishLog("critical", "SAFETY INTERLOCK: Outlet pump auto-stopped to prevent vessel running dry!");
+            }
+
+            // Failsafe Overflow Protection: Auto-stop inlet pump if vessel reaches full capacity
+            if (relays.isIntakeOn() && currentDist <= config.distFull && currentDist > 0 && currentState != STATE_COMMISSION_FILL && !demoMode) {
+                relays.setIntake(false);
+                pulseIntakeActive = false;
+                mqtt.publishLog("critical", "SAFETY INTERLOCK: Inlet pump auto-stopped to prevent vessel overflow!");
+            }
         }
 
         // 4. Daytime Photoperiod Light Evaluation

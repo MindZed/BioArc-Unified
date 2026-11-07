@@ -12,7 +12,7 @@
 
 ---
 
-[Executive Summary](#-executive-summary--repository-structure) • [Hardware Architecture](#-hardware-architecture--actuator-mapping) • [Algorithmic Deep Dive](#-algorithmic-deep-dive-green-excess-index-gei) • [Difficulties Faced & Solved](#-difficulties-faced--how-we-overcame-them) • [Compilation Guide](#-compilation--flashing-guide)
+[Executive Summary](#-executive-summary--repository-structure) • [Bill of Materials (BOM)](HARDWARE_BOM.md) • [Hardware Architecture](#-hardware-architecture--actuator-mapping) • [Pinout & Wiring](HARDWARE_PINOUT_AND_WIRING.md) • [Algorithmic Deep Dive](#-algorithmic-deep-dive-green-excess-index-gei) • [Difficulties Faced & Solved](#-difficulties-faced--how-we-overcame-them) • [Compilation Guide](#-compilation--flashing-guide)
 
 </div>
 

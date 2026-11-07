@@ -14,7 +14,7 @@ interface ControlPanelModalProps {
 }
 
 export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
-  const { sendActionCommand, sendConfigCommand, openAdminAuthModal, startDemoCycle } = useStore();
+  const { sendActionCommand, sendConfigCommand, openAdminAuthModal, startDemoCycle, openPumpConfirmModal } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -84,25 +84,47 @@ export function ControlPanelModal({ isOpen, onClose }: ControlPanelModalProps) {
               </h3>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
-                  onClick={() => sendActionCommand('pulse_intake')}
+                  onClick={() => openPumpConfirmModal({
+                    pump: 'inlet',
+                    action: 'pulse_intake',
+                    title: 'Pulse Inlet Pump (5s Jog)',
+                    description: 'Run the inlet fill pump for exactly 5 seconds.',
+                    isJog: true
+                  })}
                   className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Timer className="w-3.5 h-3.5 text-cyan-400" /> Jog Inlet (5s)
                 </button>
                 <button
-                  onClick={() => sendActionCommand('pulse_outtake')}
+                  onClick={() => openPumpConfirmModal({
+                    pump: 'outlet',
+                    action: 'pulse_outtake',
+                    title: 'Pulse Outlet Pump (5s Jog)',
+                    description: 'Run the outlet drain pump for exactly 5 seconds. Liquid will be discharged.',
+                    isJog: true
+                  })}
                   className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Timer className="w-3.5 h-3.5 text-amber-400" /> Jog Outlet (5s)
                 </button>
                 <button
-                  onClick={() => sendActionCommand('drain_all')}
-                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors cursor-pointer"
+                  onClick={() => openPumpConfirmModal({
+                    pump: 'outlet',
+                    action: 'drain_all',
+                    title: 'Drain Complete Bioreactor Vessel',
+                    description: 'CRITICAL SAFETY WARNING: This will completely drain the bioreactor vessel until empty. Liquid will be actively discharged. Ensure outtake tubing is secured in a waste receptacle.'
+                  })}
+                  className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors cursor-pointer text-rose-300"
                 >
                   Drain All (Outtake)
                 </button>
                 <button
-                  onClick={() => sendActionCommand('drain_partial')}
+                  onClick={() => openPumpConfirmModal({
+                    pump: 'outlet',
+                    action: 'drain_partial',
+                    title: 'Drain Partial (15% Residual Harvest)',
+                    description: 'This will drain the bioreactor down to 15% culture depth for harvest extraction. Ensure collection container is connected.'
+                  })}
                   className="py-2.5 px-3 bg-surface-container hover:bg-surface-variant rounded-xl text-xs font-semibold border border-outline-variant/60 transition-colors cursor-pointer"
                 >
                   Drain Partial

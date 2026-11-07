@@ -37,6 +37,7 @@ import { SystemLogsCard } from "@/components/dashboard/SystemLogsCard";
 import { CommissioningModal } from "@/components/dashboard/CommissioningModal";
 import { ControlPanelModal } from "@/components/dashboard/ControlPanelModal";
 import { AdminPasswordModal } from "@/components/dashboard/AdminPasswordModal";
+import { PumpConfirmModal } from "@/components/dashboard/PumpConfirmModal";
 
 export default function Dashboard() {
   const { 
@@ -341,6 +342,9 @@ export default function Dashboard() {
 
       {/* Admin Verification Modal for Dev Mode & Actuator Controls */}
       <AdminPasswordModal />
+
+      {/* Confirmation Dialog for Destructive Pump Actions (Inlet & Outlet) */}
+      <PumpConfirmModal />
 
     </div>
   );

@@ -9,7 +9,7 @@ import { useSession } from "next-auth/react";
 import { ShieldAlert, Wrench, Timer, Droplet, Lock, LockOpen, OctagonAlert, Monitor } from "lucide-react";
 
 export function ActuatorMatrixCard() {
-  const { fsm, fsmCurrentState, sendActionCommand, telemetry, openAdminAuthModal } = useStore();
+  const { fsm, fsmCurrentState, sendActionCommand, telemetry, openAdminAuthModal, openPumpConfirmModal } = useStore();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -65,14 +65,36 @@ export function ActuatorMatrixCard() {
           icon="water_drop"
           active={fsm.inletPump}
           isInteractive={isManual}
-          onClick={() => sendActionCommand(fsm.inletPump ? 'intake_off' : 'intake_on')}
+          onClick={() => {
+            if (fsm.inletPump) {
+              sendActionCommand('intake_off');
+            } else {
+              openPumpConfirmModal({
+                pump: 'inlet',
+                action: 'intake_on',
+                title: 'Turn ON Inlet Pump',
+                description: 'You are about to start the continuous inlet pump to fill the bioreactor vessel. Ensure supply reservoir is connected and monitor liquid level to prevent overflow.'
+              });
+            }
+          }}
         />
         <ActuatorRow
           name="Outlet Pump"
           icon="valve"
           active={fsm.outletPump}
           isInteractive={isManual}
-          onClick={() => sendActionCommand(fsm.outletPump ? 'outtake_off' : 'outtake_on')}
+          onClick={() => {
+            if (fsm.outletPump) {
+              sendActionCommand('outtake_off');
+            } else {
+              openPumpConfirmModal({
+                pump: 'outlet',
+                action: 'outtake_on',
+                title: 'Turn ON Outlet Pump (Drain)',
+                description: 'CRITICAL SAFETY WARNING: You are about to start the continuous outlet drain pump. Liquid will be discharged from the bioreactor chamber. Ensure drain tubing is secure in a collection container to prevent vessel dry-out or spills.'
+              });
+            }
+          }}
         />
         <ActuatorRow
           name="Air Compressor"
@@ -169,7 +191,13 @@ export function ActuatorMatrixCard() {
           {/* Dev Bench Quick Jog Tools: Inlet 5s, Outlet 5s, Halt All */}
           <div className="grid grid-cols-3 gap-1.5">
             <button
-              onClick={() => sendActionCommand('pulse_intake')}
+              onClick={() => openPumpConfirmModal({
+                pump: 'inlet',
+                action: 'pulse_intake',
+                title: 'Pulse Inlet Pump (5s Jog)',
+                description: 'This will run the inlet pump for exactly 5 seconds to jog fluid into the chamber.',
+                isJog: true
+              })}
               className="py-1.5 px-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40 flex items-center justify-center gap-1 cursor-pointer transition-colors"
               title="Prime inlet pump for 5 seconds"
             >
@@ -178,7 +206,13 @@ export function ActuatorMatrixCard() {
             </button>
 
             <button
-              onClick={() => sendActionCommand('pulse_outtake')}
+              onClick={() => openPumpConfirmModal({
+                pump: 'outlet',
+                action: 'pulse_outtake',
+                title: 'Pulse Outlet Pump (5s Jog)',
+                description: 'This will run the outlet drain pump for exactly 5 seconds. Fluid will be discharged from the vessel.',
+                isJog: true
+              })}
               className="py-1.5 px-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-surface-container hover:bg-surface-variant text-on-surface-variant border border-outline-variant/40 flex items-center justify-center gap-1 cursor-pointer transition-colors"
               title="Pulse harvest outlet pump for 5 seconds"
             >

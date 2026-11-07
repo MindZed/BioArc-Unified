@@ -1,6 +1,7 @@
 # 🔌 BioArc Hardware: Master Pinout, Wiring & Operational Workflow Reference
 
 > **Document Status:** Active Hardware Reference Log  
+> **Bill of Materials:** [Master Bill of Materials (BOM)](HARDWARE_BOM.md)  
 > **Target Board:** ESP32 Dev Module (30-pin / 38-pin ESP-WROOM-32)  
 > **Power Supply:** 5V DC (Minimum 2.5A recommended for ESP32 + Relays + Sensors) + 12V/24V auxiliary supply for solenoids/pumps
 
